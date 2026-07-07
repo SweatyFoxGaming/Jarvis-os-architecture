@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*$py.class
+data/*.db
+data/*.jsonl
+models/*.gguf
+models/refined_model/
+.env

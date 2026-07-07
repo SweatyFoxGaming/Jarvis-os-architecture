@@ -13,13 +13,18 @@ class LLMEngine:
 
     def load_model(self):
         print(f"Loading model from {self.model_path}...")
+
+        # Check if we have an adapter to load
+        lora_path = os.getenv("LORA_PATH", "models/refined_model")
+
         self.llm = Llama(
             model_path=self.model_path,
+            lora_path=lora_path if os.path.exists(lora_path) else None,
             n_ctx=2048,
             n_threads=os.cpu_count(),
             n_gpu_layers=0 # Default to CPU
         )
-        print("Model loaded successfully.")
+        print("Model loaded successfully" + (f" with adapter from {lora_path}" if os.path.exists(lora_path) else ""))
 
     def generate(self, prompt, max_tokens=512, stop=None):
         if not self.llm:

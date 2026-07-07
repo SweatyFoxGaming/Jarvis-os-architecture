@@ -18,7 +18,8 @@ class MemorySystem:
                 prompt TEXT,
                 response TEXT,
                 reflection TEXT,
-                success_score INTEGER
+                success_score INTEGER,
+                consolidated INTEGER DEFAULT 0
             )
         ''')
         # Semantic Memory: Learned facts and lessons
@@ -64,6 +65,14 @@ class MemorySystem:
         cursor = self.conn.cursor()
         cursor.execute(
             "SELECT reflection FROM episodic_memory WHERE reflection IS NOT NULL AND reflection != '' ORDER BY id DESC LIMIT ?",
+            (limit,)
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_semantic_knowledge(self, limit=20):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT value FROM semantic_memory ORDER BY id DESC LIMIT ?",
             (limit,)
         )
         return [row[0] for row in cursor.fetchall()]

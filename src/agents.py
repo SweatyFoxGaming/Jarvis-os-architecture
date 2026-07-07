@@ -11,12 +11,17 @@ class ResearchAgent(BaseAgent):
         # 1. Retrieve existing knowledge and lessons
         existing = self.memory.search_episodes(topic)
         lessons = self.memory.get_recent_lessons(limit=5)
+        knowledge = self.memory.get_semantic_knowledge(limit=10)
 
         context = "\n".join([f"Previous: {e[0]} -> {e[1]}" for e in existing])
         lessons_context = "\n".join([f"Lesson Learned: {l}" for l in lessons])
+        knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
 
         prompt = f"""
         System: You are the Research Agent for Phoenix OS.
+        Core Knowledge Base:
+        {knowledge_context}
+
         Context of previous research: {context}
         General lessons learned: {lessons_context}
         Topic: {topic}
@@ -29,10 +34,16 @@ class ResearchAgent(BaseAgent):
 class CodingAgent(BaseAgent):
     def analyze_code(self, code_snippet, task="Review"):
         lessons = self.memory.get_recent_lessons(limit=5)
+        knowledge = self.memory.get_semantic_knowledge(limit=10)
+
         context = "\n".join([f"Lesson Learned: {l}" for l in lessons])
+        knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
 
         prompt = f"""
         System: You are the Coding Agent for Phoenix OS.
+        Core Knowledge Base:
+        {knowledge_context}
+
         Lessons from experience: {context}
         Code:
         {code_snippet}
