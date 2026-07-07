@@ -50,13 +50,36 @@ The engine includes a `SynapseBridge` that follows the Phoenix OS Synapse specif
 ### Knowledge Seeding
 The `src/seed_knowledge.py` script allows JARVIS to ingest core system documentation directly from the Phoenix OS repository, ensuring it understands the operating system it is running on.
 
-## 🚀 Setup & Usage
+## 🚀 Installation & Usage (Ubuntu Linux)
 
-1. **Dependencies**: `pip install -r requirements.txt`
-2. **Model**: Download a GGUF model (recommended: `phi-2.Q4_K_M.gguf`) into the `models/` directory.
-3. **API Keys**: Add your `BRAVE_API_KEY` to the `.env` file.
-3. **Seed Knowledge**: Run `export PYTHONPATH=$PYTHONPATH:. && python3 src/seed_knowledge.py` to ingest AIOS docs.
-4. **Run**: `python3 src/main.py`
+### 1. Install System Dependencies
+Open your terminal and run:
+```bash
+sudo apt update
+sudo apt install -y python3-pip python3-venv python3-pyqt6 espeak libportaudio2
+```
+
+### 2. Setup Virtual Environment
+It is highly recommended to use a virtual environment on Linux:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Python Dependencies
+```bash
+pip3 install -r requirements.txt
+```
+
+### 4. Configuration
+- **Model**: Download a GGUF model (e.g., `phi-2.Q4_K_M.gguf`) into the `models/` directory.
+- **API Keys**: Add your `BRAVE_API_KEY` to the `.env` file.
+- **Seed Knowledge**: Run `export PYTHONPATH=$PYTHONPATH:. && python3 src/seed_knowledge.py` to ingest AIOS docs.
+
+### 5. Run JARVIS
+```bash
+python3 src/main.py
+```
 
 ### CLI Modes:
 - `[0] Commander`: Full JARVIS orchestration (Auto-delegation).
