@@ -13,3 +13,10 @@ pyinstaller --onefile --windowed \
     src/main.py
 
 echo "Build complete. Executable located in dist/JARVIS"
+
+echo "--- Installing Desktop Entry ---"
+sudo cp dist/JARVIS /usr/local/bin/
+sudo cp JARVIS.desktop /usr/share/applications/
+sudo chmod +x /usr/share/applications/JARVIS.desktop
+
+echo "Installation complete. You can now find JARVIS in your application menu."

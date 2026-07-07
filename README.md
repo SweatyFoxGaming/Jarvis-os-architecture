@@ -89,6 +89,14 @@ pip3 install -r requirements.txt
 python3 src/main.py
 ```
 
+### 7. Build & Install as a Desktop App (Ubuntu)
+If you want to install JARVIS as a standalone application that appears in your Ubuntu Application Menu:
+```bash
+chmod +x build.sh
+./build.sh
+```
+This will package the app and create a launcher so you can open JARVIS just like Firefox.
+
 ## 🛠️ Troubleshooting Installation
 
 If you encounter errors during `pip3 install`:
