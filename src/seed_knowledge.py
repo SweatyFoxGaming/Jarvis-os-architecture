@@ -12,6 +12,18 @@ def seed_knowledge(aios_path="aios_repo"):
         "ui": "AMBIENT_UI_SPECIFICATION.md"
     }
 
+    # Universal Language Principles
+    languages = {
+        "rust": "Ownership, Borrowing, Lifetimes, zero-cost abstractions.",
+        "c": "Manual memory management, pointers, direct hardware access.",
+        "python": "Dynamic typing, rapid prototyping, extensive libraries.",
+        "javascript": "Event-driven, asynchronous, single-threaded execution.",
+        "cpp": "OOP, templates, RAII, multi-paradigm.",
+        "go": "Goroutines, channels, implicit interfaces, garbage collection.",
+        "java": "JVM, strong typing, multithreading, enterprise scale.",
+        "assembly": "Instruction sets (x86/ARM), registers, stack management."
+    }
+
     print(f"--- Seeding Phoenix OS Knowledge from {aios_path} ---")
 
     for category, filename in docs.items():
@@ -31,6 +43,10 @@ def seed_knowledge(aios_path="aios_repo"):
     memory.add_fact("aios_principle", "resource_limit", "Phoenix OS is designed for hardware with 1-2GB RAM.")
     memory.add_fact("aios_principle", "kernel_language", "The Phoenix OS kernel is written in Rust (no_std).")
     memory.add_fact("aios_principle", "ipc_system", "Synapse is the structured IPC system for Phoenix OS.")
+
+    # Seed language principles
+    for lang, principle in languages.items():
+        memory.add_fact("language_principle", lang, principle)
 
     print("Knowledge seeding complete.")
 

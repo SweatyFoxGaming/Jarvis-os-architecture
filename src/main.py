@@ -48,7 +48,7 @@ def main():
     }
 
     while True:
-        print("\nModes: [0] Commander (Auto) [1] Chat/Research [2] Coding [3] Reflect [4] Sleep-Learn [q] Quit")
+        print("\nModes: [0] Commander [1] Research [2] Coding [3] Reflect [4] Sleep-Learn [5] Learn-Lang [q] Quit")
         choice = input("Select mode: ").strip().lower()
 
         if choice == 'q':
@@ -89,6 +89,14 @@ def main():
             trainer = PhoenixTrainer(engine, memory)
             trainer.train()
             print("Sleep-learning complete. Semantic knowledge base updated.")
+        elif choice == '5':
+            lang = input("Which language/framework should JARVIS learn? ").strip()
+            print(f"\nJARVIS Researching and learning {lang}...")
+            # 1. Research the language
+            knowledge = researcher.research(f"Core principles and best practices of {lang} programming language")
+            # 2. Add to semantic memory
+            memory.add_fact("language_principle", lang, knowledge)
+            print(f"\nJARVIS has integrated {lang} into its core knowledge base.")
         else:
             print("Invalid choice.")
 

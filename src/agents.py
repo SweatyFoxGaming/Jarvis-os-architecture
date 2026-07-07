@@ -79,14 +79,16 @@ class CodingAgent(BaseAgent):
             context_block = f"Lessons: {lessons}\nKnowledge: {knowledge}"
 
         prompt = f"""
-        System: You are the Coding Agent for Phoenix OS.
+        System: You are the Universal Multi-lingual Coding Specialist for Phoenix OS.
+        You are proficient in all major programming languages (Rust, C, Python, JS, Go, Java, Assembly, etc.).
+
         Contextual Background:
         {context_block}
 
         Code:
         {code_snippet}
 
-        Task: {task} this code. Suggest improvements if necessary, focusing on efficiency and readability.
+        Task: {task} this code. Provide idiomatic improvements, bug fixes, or architectural suggestions based on the language's best practices.
         """
         response = self.engine.generate(prompt)
         self.memory.add_episode(f"Code Analysis ({task})", response)
