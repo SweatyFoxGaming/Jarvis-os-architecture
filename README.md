@@ -52,7 +52,13 @@ The `src/seed_knowledge.py` script allows JARVIS to ingest core system documenta
 
 ## 🚀 Installation & Usage (Ubuntu Linux)
 
-### 1. Install System Dependencies
+### 1. Clone & Enter Directory
+```bash
+git clone https://github.com/SweatyFoxGaming/llm.git
+cd llm
+```
+
+### 2. Install System Dependencies
 JARVIS requires specific build tools and system libraries to run its AI engine on Ubuntu:
 ```bash
 sudo apt update
@@ -60,24 +66,25 @@ sudo apt install -y build-essential cmake python3-pip python3-venv python3-dev \
                     python3-pyqt6 espeak libportaudio2
 ```
 
-### 2. Setup Virtual Environment
+### 3. Setup Virtual Environment
 It is highly recommended to use a virtual environment on Linux:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 3. Install Python Dependencies
+### 4. Install Python Dependencies
+**Important**: Ensure you are in the `llm` folder where `requirements.txt` is located:
 ```bash
 pip3 install -r requirements.txt
 ```
 
-### 4. Configuration
+### 5. Configuration
 - **Model**: Download a GGUF model (e.g., `phi-2.Q4_K_M.gguf`) into the `models/` directory.
 - **API Keys**: Add your `BRAVE_API_KEY` to the `.env` file.
 - **Seed Knowledge**: Run `export PYTHONPATH=$PYTHONPATH:. && python3 src/seed_knowledge.py` to ingest AIOS docs.
 
-### 5. Run JARVIS
+### 6. Run JARVIS
 ```bash
 python3 src/main.py
 ```
