@@ -90,7 +90,7 @@ python3 src/main.py
 ```
 
 ### 7. Build & Install as a Desktop App (Ubuntu)
-If you want to install JARVIS as a standalone application that appears in your Ubuntu Application Menu:
+**Important**: You must have the virtual environment activated (`source venv/bin/activate`) before running this:
 ```bash
 chmod +x build.sh
 ./build.sh

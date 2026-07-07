@@ -104,6 +104,10 @@ class AmbientUI(QMainWindow):
         self.add_chat("JARVIS", response)
         self.voice.speak(response)
 
+        # Autonomous Self-Improvement
+        if 'improver' in self.agents:
+            self.agents['improver'].reflect_on_last_interaction()
+
     def submit_command(self):
         cmd = self.command_input.text().strip()
         if not cmd: return

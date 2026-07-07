@@ -18,45 +18,55 @@ def main():
 
     print("--- Phoenix LLM (JARVIS Core) ---")
 
-    # Hardware Profile Selection
+    # Default to GUI if run without terminal (like .desktop file)
+    is_terminal = sys.stdin.isatty()
+
+    if not is_terminal:
+        os.environ["HARDWARE_PROFILE"] = HardwareProfile.LOW
+        memory = MemorySystem()
+        engine = LLMEngine()
+
+        agents = {
+            'research': ResearchAgent(engine, memory),
+            'coding': CodingAgent(engine, memory),
+            'planning': PlanningAgent(engine, memory),
+            'security': SecurityAgent(engine, memory),
+            'memory': MemoryAgent(engine, memory),
+            'improver': SelfImprovementAgent(engine, memory),
+            'commander': CommanderAgent(engine, memory)
+        }
+
+        app = QApplication(sys.argv)
+        window = AmbientUI(engine, memory, agents)
+        window.show()
+        sys.exit(app.exec())
+
+    # Terminal Logic
     print("\nSelect Hardware Profile:")
     print("[1] Low-End (1-2GB RAM)")
     print("[2] Performance (4GB+ RAM)")
     p_choice = input("Choice: ").strip()
-    if p_choice == '2':
-        os.environ["HARDWARE_PROFILE"] = HardwareProfile.PERFORMANCE
-        print("Performance profile activated.")
-    else:
-        os.environ["HARDWARE_PROFILE"] = HardwareProfile.LOW
-        print("Low-End profile activated.")
+    os.environ["HARDWARE_PROFILE"] = HardwareProfile.PERFORMANCE if p_choice == '2' else HardwareProfile.LOW
 
     memory = MemorySystem()
     engine = LLMEngine()
 
-    researcher = ResearchAgent(engine, memory)
-    coder = CodingAgent(engine, memory)
-    improver = SelfImprovementAgent(engine, memory)
-    planner = PlanningAgent(engine, memory)
-    security = SecurityAgent(engine, memory)
-    mem_agent = MemoryAgent(engine, memory)
-    commander = CommanderAgent(engine, memory)
-
     agents = {
-        'research': researcher,
-        'coding': coder,
-        'planning': planner,
-        'security': security,
-        'memory': mem_agent
+        'research': ResearchAgent(engine, memory),
+        'coding': CodingAgent(engine, memory),
+        'planning': PlanningAgent(engine, memory),
+        'security': SecurityAgent(engine, memory),
+        'memory': MemoryAgent(engine, memory),
+        'improver': SelfImprovementAgent(engine, memory),
+        'commander': CommanderAgent(engine, memory)
     }
 
-    # Interactive selection for CLI vs GUI
     print("\nSelect Interface:")
     print("[1] Desktop GUI (Ambient UI)")
     print("[2] Terminal CLI")
     i_choice = input("Choice: ").strip()
 
     if i_choice == '1':
-        print("Launching Ambient UI...")
         app = QApplication(sys.argv)
         window = AmbientUI(engine, memory, agents)
         window.show()
@@ -71,16 +81,16 @@ def main():
         elif choice == '0':
             user_input = input("Request: ")
             print("\nJARVIS Orchestrating...")
-            res = commander.handle_request(user_input, agents)
+            res = agents['commander'].handle_request(user_input, agents)
             print(f"\nResponse: {res}")
-            improver.reflect_on_last_interaction()
+            agents['improver'].reflect_on_last_interaction()
         elif choice == '1':
             topic = input("Research Topic/Question: ")
             print("\nJARVIS Researching...")
-            res = researcher.research(topic)
+            res = agents['research'].research(topic)
             print(f"\nResult: {res}")
             # Auto-reflect
-            improver.reflect_on_last_interaction()
+            agents['improver'].reflect_on_last_interaction()
         elif choice == '2':
             print("Enter code (end with a blank line):")
             lines = []
@@ -91,13 +101,13 @@ def main():
                 lines.append(line)
             code = "\n".join(lines)
             print("\nJARVIS Analyzing Code...")
-            res = coder.analyze_code(code)
+            res = agents['coding'].analyze_code(code)
             print(f"\nAnalysis: {res}")
             # Auto-reflect
-            improver.reflect_on_last_interaction()
+            agents['improver'].reflect_on_last_interaction()
         elif choice == '3':
             print("\nJARVIS Reflecting on past work...")
-            lesson = improver.reflect_on_last_interaction()
+            lesson = agents['improver'].reflect_on_last_interaction()
             print(f"\nLesson Learned: {lesson}")
         elif choice == '4':
             print("\n--- JARVIS Sleep-Learning Mode ---")

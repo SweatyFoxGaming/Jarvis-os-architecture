@@ -1,16 +1,28 @@
 #!/bin/bash
+set -e # Exit immediately if a command exits with a non-zero status.
+
 echo "--- Building JARVIS for Ubuntu ---"
-# Ensure we are in the project root
+
+# Check if we are in a virtual environment
+if [[ -z "$VIRTUAL_ENV" ]]; then
+    echo "Error: Virtual environment not active. Run 'source venv/bin/activate' first."
+    exit 1
+fi
+
+# Ensure PYTHONPATH includes src
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 
 # Build the executable
-# --onefile: single executable
-# --windowed: no terminal window on start (since we have a GUI)
-# --add-data: include memory and documentation templates
-pyinstaller --onefile --windowed \
+echo "Starting PyInstaller build..."
+python3 -m PyInstaller --onefile --windowed \
     --name "JARVIS" \
     --add-data "src:src" \
     src/main.py
+
+if [ ! -f "dist/JARVIS" ]; then
+    echo "Error: Build failed. dist/JARVIS not found."
+    exit 1
+fi
 
 echo "Build complete. Executable located in dist/JARVIS"
 
