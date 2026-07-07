@@ -18,6 +18,7 @@ class MemorySystem:
                 prompt TEXT,
                 response TEXT,
                 reflection TEXT,
+                tags TEXT,
                 success_score INTEGER,
                 consolidated INTEGER DEFAULT 0
             )
@@ -34,12 +35,12 @@ class MemorySystem:
         ''')
         self.conn.commit()
 
-    def add_episode(self, prompt, response, reflection=None, score=0):
+    def add_episode(self, prompt, response, reflection=None, score=0, tags=None):
         cursor = self.conn.cursor()
         timestamp = datetime.datetime.now().isoformat()
         cursor.execute(
-            "INSERT INTO episodic_memory (timestamp, prompt, response, reflection, success_score) VALUES (?, ?, ?, ?, ?)",
-            (timestamp, prompt, response, reflection, score)
+            "INSERT INTO episodic_memory (timestamp, prompt, response, reflection, tags, success_score) VALUES (?, ?, ?, ?, ?, ?)",
+            (timestamp, prompt, response, reflection, tags, score)
         )
         self.conn.commit()
 
@@ -54,10 +55,12 @@ class MemorySystem:
 
     def search_episodes(self, query, limit=5):
         cursor = self.conn.cursor()
-        # Simple keyword search for now
+        # Enhanced search using tags if possible, fallback to keyword
         cursor.execute(
-            "SELECT prompt, response, reflection FROM episodic_memory WHERE prompt LIKE ? OR response LIKE ? ORDER BY id DESC LIMIT ?",
-            (f'%{query}%', f'%{query}%', limit)
+            """SELECT prompt, response, reflection FROM episodic_memory
+               WHERE tags LIKE ? OR prompt LIKE ? OR response LIKE ?
+               ORDER BY id DESC LIMIT ?""",
+            (f'%{query}%', f'%{query}%', f'%{query}%', limit)
         )
         return cursor.fetchall()
 

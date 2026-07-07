@@ -95,31 +95,61 @@ class CommanderAgent(BaseAgent):
         super().__init__(engine, memory)
         self.bridge = SynapseBridge()
 
-    def handle_request(self, user_input, agents):
-        # 1. Security Audit
-        audit = agents['security'].audit_request(user_input)
-        if "STATUS: DENIED" in audit:
-            return audit
+    def _generate_tags(self, text):
+        prompt = f"System: Generate 3 comma-separated keywords for the following: {text}"
+        return self.engine.generate(prompt, max_tokens=20)
 
-        # 2. Planning (for complex requests)
-        plan = agents['planning'].create_plan(user_input)
-        print(f"\n[JARVIS Plan]:\n{plan}\n")
+    def handle_request(self, user_input, agents, fast_mode=True):
+        # 1. Fast-Path: Combined Audit, Planning, and Decision
+        if fast_mode:
+            print("[JARVIS] Executing fast-path orchestration...")
+            prompt = f"""
+            System: You are the Commander of Phoenix OS.
+            Request: {user_input}
 
-        # 3. Execution (Simulated multi-step for now)
-        knowledge = self.memory.get_semantic_knowledge(limit=10)
-        knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
+            Task:
+            1. Audit: Is this safe?
+            2. Plan: What are the steps?
+            3. Decision: Should I handle it or delegate?
 
-        prompt = f"""
-        System: You are the Commander of Phoenix OS.
-        Core Knowledge:
-        {knowledge_context}
+            Format:
+            AUDIT: [APPROVED/DENIED]
+            PLAN: [Steps]
+            ACTION: [DELEGATE: Agent/SYSTEM: Cmd/CHAT: Msg]
+            """
+            fast_res = self.engine.generate(prompt)
 
-        User Request: {user_input}
-        Proposed Plan: {plan}
+            if "AUDIT: DENIED" in fast_res:
+                return "Security Audit Denied."
 
-        Task: Execute the plan. If delegation is needed, use DELEGATE: [Agent] or SYSTEM: [Command].
-        """
-        response = self.engine.generate(prompt)
+            if "ACTION: DELEGATE" in fast_res or "ACTION: SYSTEM" in fast_res:
+                # Extract action and continue execution
+                response = fast_res.split("ACTION:")[1].strip()
+            else:
+                response = fast_res
+        else:
+            # Original robust multi-step path
+            audit = agents['security'].audit_request(user_input)
+            if "STATUS: DENIED" in audit:
+                return audit
+            plan = agents['planning'].create_plan(user_input)
+            print(f"\n[JARVIS Plan]:\n{plan}\n")
+
+            # 3. Execution (Simulated multi-step for now)
+            knowledge = self.memory.get_semantic_knowledge(limit=10)
+            knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
+
+            prompt = f"""
+            System: You are the Commander of Phoenix OS.
+            Core Knowledge:
+            {knowledge_context}
+
+            User Request: {user_input}
+            Proposed Plan: {plan}
+
+            Task: Execute the plan. If delegation is needed, use DELEGATE: [Agent] or SYSTEM: [Command].
+            """
+            response = self.engine.generate(prompt)
 
         if "DELEGATE: Research" in response:
             parts = response.split("-")
@@ -135,7 +165,8 @@ class CommanderAgent(BaseAgent):
             params = cmd_part.split("-")[1].strip() if "-" in cmd_part else None
             return self.bridge.system_call(cmd, params)
 
-        self.memory.add_episode(user_input, response)
+        tags = self._generate_tags(user_input + " " + response)
+        self.memory.add_episode(user_input, response, tags=tags)
         return response
 
 class PlanningAgent(BaseAgent):
@@ -211,6 +242,23 @@ class MemoryAgent(BaseAgent):
         summary = self.engine.generate(summary_prompt)
         self.memory.add_fact("experience_summary", "auto_summary", summary)
         return summary
+
+    def compact_context(self, interactions):
+        """
+        Takes a list of interactions and compresses them into a single summary block
+        to save tokens in the context window.
+        """
+        if not interactions:
+            return ""
+
+        compaction_prompt = f"""
+        System: You are the Context Compactor for Phoenix OS.
+        Interactions:
+        {interactions}
+
+        Task: Provide a 2-sentence summary of the conversation history above that preserves all key technical details.
+        """
+        return self.engine.generate(compaction_prompt)
 
 class SelfImprovementAgent(BaseAgent):
     def reflect_on_last_interaction(self):
