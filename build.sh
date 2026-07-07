@@ -17,6 +17,7 @@ echo "Starting PyInstaller build..."
 # We use --collect-all for libraries that might have dynamic data
 python3 -m PyInstaller --onefile --windowed \
     --name "JARVIS" \
+    --add-data "src/static:src/static" \
     --add-data "src:src" \
     --add-data "models:models" \
     src/main.py

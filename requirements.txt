@@ -7,3 +7,6 @@ psutil
 pyttsx3
 speechrecognition
 pyinstaller
+fastapi
+uvicorn
+pydantic

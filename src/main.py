@@ -97,6 +97,7 @@ def main():
     print("\nSelect Interface:")
     print("[1] Desktop GUI (Ambient UI)")
     print("[2] Terminal CLI")
+    print("[3] Web Dashboard (Local Server)")
     i_choice = input("Choice: ").strip()
 
     if i_choice == '1':
@@ -104,6 +105,11 @@ def main():
         window = AmbientUI(engine, memory, agents)
         window.show()
         sys.exit(app.exec())
+    elif i_choice == '3':
+        import uvicorn
+        print("Launching Web Dashboard on http://localhost:8000")
+        uvicorn.run("src.api:app", host="0.0.0.0", port=8000, reload=False)
+        sys.exit(0)
 
     while True:
         print("\nModes: [0] Commander [1] Research [2] Coding [3] Reflect [4] Sleep-Learn [5] Learn-Lang [q] Quit")
