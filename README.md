@@ -53,10 +53,11 @@ The `src/seed_knowledge.py` script allows JARVIS to ingest core system documenta
 ## 🚀 Installation & Usage (Ubuntu Linux)
 
 ### 1. Install System Dependencies
-Open your terminal and run:
+JARVIS requires specific build tools and system libraries to run its AI engine on Ubuntu:
 ```bash
 sudo apt update
-sudo apt install -y python3-pip python3-venv python3-pyqt6 espeak libportaudio2
+sudo apt install -y build-essential cmake python3-pip python3-venv python3-dev \
+                    python3-pyqt6 espeak libportaudio2
 ```
 
 ### 2. Setup Virtual Environment
@@ -80,6 +81,22 @@ pip3 install -r requirements.txt
 ```bash
 python3 src/main.py
 ```
+
+## 🛠️ Troubleshooting Installation
+
+If you encounter errors during `pip3 install`:
+
+1. **Error: "Failed building wheel for llama-cpp-python"**:
+   Ensure you installed `build-essential` and `cmake`. These are required to compile the engine.
+
+2. **Error: "externally-managed-environment"**:
+   You are trying to install to the system python. Ensure you created and activated the **Virtual Environment** (Step 2).
+
+3. **Memory Issues during pip install**:
+   Try running the install with a lower thread count:
+   ```bash
+   pip3 install --no-cache-dir -r requirements.txt
+   ```
 
 ### CLI Modes:
 - `[0] Commander`: Full JARVIS orchestration (Auto-delegation).
