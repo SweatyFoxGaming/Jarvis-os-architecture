@@ -13,7 +13,28 @@ from profiles import HardwareProfile
 from gui import AmbientUI
 from PyQt6.QtWidgets import QApplication
 
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+import logging
+
 def main():
+    # Setup logging
+    log_path = "/tmp/jarvis_startup.log"
+    logging.basicConfig(filename=log_path, level=logging.DEBUG,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info("JARVIS Starting up...")
+
+    # Setup absolute pathing for standalone execution
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir("..") # Go to project root
+
     load_dotenv()
 
     print("--- Phoenix LLM (JARVIS Core) ---")
@@ -22,7 +43,16 @@ def main():
     is_terminal = sys.stdin.isatty()
 
     if not is_terminal:
+        logging.info("Non-terminal environment detected. Launching GUI.")
+        app = QApplication(sys.argv)
         os.environ["HARDWARE_PROFILE"] = HardwareProfile.LOW
+
+        # Show window immediately with a loading message
+        window = AmbientUI(None, None, {})
+        window.add_chat("System", "JARVIS is initializing core systems...")
+        window.show()
+        app.processEvents() # Ensure the window draws
+
         memory = MemorySystem()
         engine = LLMEngine()
 
@@ -36,9 +66,12 @@ def main():
             'commander': CommanderAgent(engine, memory)
         }
 
-        app = QApplication(sys.argv)
-        window = AmbientUI(engine, memory, agents)
-        window.show()
+        # Re-init window with real data
+        window.engine = engine
+        window.memory = memory
+        window.agents = agents
+        window.add_chat("JARVIS", "Core systems online. Welcome.")
+
         sys.exit(app.exec())
 
     # Terminal Logic
@@ -118,7 +151,7 @@ def main():
             lang = input("Which language/framework should JARVIS learn? ").strip()
             print(f"\nJARVIS Researching and learning {lang}...")
             # 1. Research the language
-            knowledge = researcher.research(f"Core principles and best practices of {lang} programming language")
+            knowledge = agents['research'].research(f"Core principles and best practices of {lang} programming language")
             # 2. Add to semantic memory
             embedding = engine.embed(knowledge)
             memory.add_fact("language_principle", lang, knowledge, embedding=embedding)

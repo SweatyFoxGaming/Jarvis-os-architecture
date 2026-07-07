@@ -5,7 +5,13 @@ import pickle
 import numpy as np
 
 class MemorySystem:
-    def __init__(self, db_path="data/memory.db"):
+    def __init__(self, db_path=None):
+        if db_path is None:
+            # Persistent path for standalone app
+            db_dir = os.path.join(os.path.expanduser("~"), ".jarvis_memory")
+            os.makedirs(db_dir, exist_ok=True)
+            db_path = os.path.join(db_dir, "memory.db")
+
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.conn = sqlite3.connect(db_path)
         self.create_tables()

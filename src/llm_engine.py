@@ -3,7 +3,8 @@ from llama_cpp import Llama
 
 class LLMEngine:
     def __init__(self, model_path=None):
-        self.model_path = model_path or os.getenv("MODEL_PATH", "models/phi-2.Q4_K_M.gguf")
+        default_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models/phi-2.Q4_K_M.gguf")
+        self.model_path = model_path or os.getenv("MODEL_PATH", default_path)
         self.llm = None
 
         if os.path.exists(self.model_path):
