@@ -80,10 +80,9 @@ class CodingAgent(BaseAgent):
             knowledge = self.memory.get_semantic_knowledge(limit=10)
             context_block = f"Lessons: {lessons}\nKnowledge: {knowledge}"
 
+        # Pass 1: Generation/Initial Analysis
         prompt = f"""
         System: You are the Universal Multi-lingual Coding Specialist for JARVIS.
-        You are proficient in all major programming languages and frameworks.
-        While you excel at Phoenix OS (Rust/Kernel) tasks, you can build, review, and optimize any software.
 
         Contextual Background:
         {context_block}
@@ -91,11 +90,28 @@ class CodingAgent(BaseAgent):
         Code:
         {code_snippet}
 
-        Task: {task} this code. Provide idiomatic improvements, bug fixes, or architectural suggestions based on the language's best practices.
+        Task: {task} this code. Provide idiomatic improvements, bug fixes, or architectural suggestions.
         """
-        response = self.engine.generate(prompt)
-        self.memory.add_episode(f"Code Analysis ({task})", response)
-        return response
+        initial_response = self.engine.generate(prompt)
+
+        # Pass 2: Proactive Self-Correction
+        print("[CodingAgent] Performing proactive self-correction...")
+        correction_prompt = f"""
+        System: You are the Lead Code Reviewer for Phoenix OS.
+        Initial Proposal:
+        {initial_response}
+
+        Task: Critically review your own proposal above.
+        1. Are there any syntax errors?
+        2. Is the memory management correct (especially for Rust/C)?
+        3. Can it be more idiomatic?
+
+        Provide the final, polished code and explanation.
+        """
+        final_response = self.engine.generate(correction_prompt)
+
+        self.memory.add_episode(f"Code Analysis ({task})", final_response)
+        return final_response
 
 class CommanderAgent(BaseAgent):
     def __init__(self, engine, memory):
@@ -112,7 +128,26 @@ class CommanderAgent(BaseAgent):
             return self.engine.embed(text)
         return None
 
+    def _detect_unknown_language(self, text):
+        # List of languages JARVIS "knows" (could be expanded by checking DB)
+        known = ["rust", "python", "c", "cpp", "javascript", "go", "java", "assembly"]
+        words = text.lower().split()
+        for w in words:
+            if w in known: return None
+        # Simple heuristic: if a common tech keyword is found but not in known list
+        potential = ["zig", "mojo", "swift", "kotlin", "elixir", "haskell"]
+        for p in potential:
+            if p in words: return p
+        return None
+
     def handle_request(self, user_input, agents, fast_mode=True):
+        # 0. Autonomous Language Onboarding
+        unknown = self._detect_unknown_language(user_input)
+        if unknown:
+            print(f"[JARVIS] New language detected: {unknown}. Autonomous onboarding triggered.")
+            research_data = agents['research'].research(f"Core principles and best practices of {unknown} programming language")
+            self.memory.add_fact("language_principle", unknown, research_data)
+
         # 1. Fast-Path: Combined Audit, Planning, and Decision
         if fast_mode:
             print("[JARVIS] Executing fast-path orchestration...")
@@ -288,6 +323,26 @@ class MemoryAgent(BaseAgent):
         return self.engine.generate(compaction_prompt)
 
 class SelfImprovementAgent(BaseAgent):
+    def optimize_system_prompts(self):
+        """
+        Meta-learning: Analyzes consolidated lessons and suggests
+        improvements to the system's own prompts.
+        """
+        lessons = self.memory.get_recent_lessons(limit=10)
+        if not lessons:
+            return "No lessons to optimize from."
+
+        optimization_prompt = f"""
+        System: You are the Meta-Learning Optimizer for Phoenix OS.
+        Recent Lessons:
+        {lessons}
+
+        Task: Based on these lessons, suggest one improvement to the Commander's system prompt to prevent future errors.
+        """
+        suggestion = self.engine.generate(optimization_prompt)
+        self.memory.add_fact("meta_optimization", "prompt_suggestion", suggestion)
+        return suggestion
+
     def reflect_on_last_interaction(self):
         # Get last episode
         cursor = self.memory.conn.cursor()

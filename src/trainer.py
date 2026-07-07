@@ -51,5 +51,26 @@ class PhoenixTrainer:
 
         print(f"Consolidated {len(rows)} episodes into permanent semantic knowledge.")
 
+        # 4. Automated Memory Garbage Collection (Experience Summarization)
+        print("--- Running Memory Garbage Collection ---")
+        summary = self.memory.get_semantic_knowledge(limit=1) # Get some context
+
+        # Trigger MemoryAgent logic through engine (simulated here for directness)
+        cursor.execute("SELECT prompt, response FROM episodic_memory WHERE consolidated = 1 LIMIT 50")
+        old_episodes = cursor.fetchall()
+
+        if len(old_episodes) > 20:
+            print(f"Summarizing {len(old_episodes)} old consolidated episodes...")
+
+            summary_prompt = f"""
+            System: You are the Memory Archiver for Phoenix OS.
+            Episodes to archive: {old_episodes}
+
+            Task: Distill these interactions into 5 core procedural skills or insights for the Semantic Skill Library.
+            """
+            archive_summary = self.engine.generate(summary_prompt)
+            self.memory.add_fact("archived_experience", "historical_summary", archive_summary)
+            print("Memory garbage collection complete.")
+
 if __name__ == "__main__":
     print("Phoenix Trainer module loaded.")

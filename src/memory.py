@@ -35,6 +35,16 @@ class MemorySystem:
                 last_updated TEXT
             )
         ''')
+        # Procedural Memory: Reusable automation routines/skills
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS skill_library (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE,
+                description TEXT,
+                code TEXT,
+                last_used TEXT
+            )
+        ''')
         self.conn.commit()
 
     def add_episode(self, prompt, response, reflection=None, score=0, tags=None, embedding=None):
@@ -101,6 +111,20 @@ class MemorySystem:
         # Sort by score descending
         results.sort(key=lambda x: x[1], reverse=True)
         return [r[0] for r in results[:limit]]
+
+    def add_skill(self, name, description, code):
+        cursor = self.conn.cursor()
+        timestamp = datetime.datetime.now().isoformat()
+        cursor.execute(
+            "INSERT OR REPLACE INTO skill_library (name, description, code, last_used) VALUES (?, ?, ?, ?)",
+            (name, description, code, timestamp)
+        )
+        self.conn.commit()
+
+    def get_skill(self, name):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT description, code FROM skill_library WHERE name = ?", (name,))
+        return cursor.fetchone()
 
     def get_semantic_knowledge(self, limit=20):
         cursor = self.conn.cursor()
