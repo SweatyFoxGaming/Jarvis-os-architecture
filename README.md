@@ -10,8 +10,20 @@ Phoenix LLM (JARVIS) uses a multi-agent orchestration model designed to balance 
 - **Commander (Personality Layer)**: The primary interface. It handles general chat, maintains the JARVIS persona (calm, capable, professional), and orchestrates tasks by delegating to specialized agents or calling system functions.
 - **Research Agent**: Specialized in multi-source information gathering. It integrates **real-time web search** (via DuckDuckGo) and cross-references results with local memory.
 - **Coding Agent**: Specialized in code analysis, debugging, and review. It is pre-seeded with knowledge of the Phoenix OS (Rust/no_std) kernel architecture.
+- **Planning Agent**: Decomposes complex, multi-stage requests into structured action plans.
+- **Security Agent**: Audits every request against a capability-based security model before execution.
+- **Memory Agent**: Manages hierarchical retrieval (Episodic + Semantic) and autonomous experience summarization.
 
-### 2. Dual-Tier Memory System
+### 2. Agent Workflow (The Chain of Command)
+When you issue a request to the **Commander [Mode 0]**, the following lifecycle occurs:
+1. **Security Audit**: The Security Agent checks the request for risks or unauthorized system commands.
+2. **Strategic Planning**: The Planning Agent breaks the request into logical steps (e.g., "Step 1: Research X, Step 2: Write code for Y").
+3. **Contextual Retrieval**: The Memory Agent pulls relevant history and facts to "prime" the executing agents.
+4. **Delegated Execution**: The Commander dispatches tasks to the Research or Coding agents.
+5. **System Interaction**: If a system command is needed, the Commander uses the Synapse Bridge to talk to the Phoenix OS kernel.
+6. **Introspective Reflection**: The Self-Improvement Agent extracts a lesson from the result to improve future performance.
+
+### 3. Dual-Tier Memory System
 Memory is stored in a local SQLite database (`data/memory.db`) to ensure persistence and low memory overhead:
 - **Episodic Memory**: A rolling history of specific interactions, including prompts, responses, and autonomous reflections.
 - **Semantic Memory**: A permanent Knowledge Base of distilled facts, rules, and system principles.
