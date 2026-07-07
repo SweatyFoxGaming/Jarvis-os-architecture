@@ -1,6 +1,11 @@
-from .memory import MemorySystem
-from .llm_engine import LLMEngine
-from .synapse_bridge import SynapseBridge
+try:
+    from .memory import MemorySystem
+    from .llm_engine import LLMEngine
+    from .synapse_bridge import SynapseBridge
+except ImportError:
+    from memory import MemorySystem
+    from llm_engine import LLMEngine
+    from synapse_bridge import SynapseBridge
 
 class BaseAgent:
     def __init__(self, engine: LLMEngine, memory: MemorySystem):
@@ -97,10 +102,12 @@ class CommanderAgent(BaseAgent):
         response = self.engine.generate(prompt)
 
         if "DELEGATE: Research" in response:
-            topic = response.split("-")[1].strip()
+            parts = response.split("-")
+            topic = parts[1].strip() if len(parts) > 1 else user_input
             return agents['research'].research(topic)
         elif "DELEGATE: Coding" in response:
-            snippet = response.split("-")[1].strip()
+            parts = response.split("-")
+            snippet = parts[1].strip() if len(parts) > 1 else user_input
             return agents['coding'].analyze_code(snippet)
         elif "SYSTEM:" in response:
             cmd_part = response.split("SYSTEM:")[1].strip()
@@ -108,6 +115,7 @@ class CommanderAgent(BaseAgent):
             params = cmd_part.split("-")[1].strip() if "-" in cmd_part else None
             return self.bridge.system_call(cmd, params)
 
+        self.memory.add_episode(user_input, response)
         return response
 
 class SelfImprovementAgent(BaseAgent):
