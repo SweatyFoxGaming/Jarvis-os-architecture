@@ -42,7 +42,8 @@ class PhoenixTrainer:
                 fact = fact.split("Fact:")[1].strip()
 
             # 2. Store as a permanent fact
-            self.memory.add_fact("consolidated_learning", f"episode_{id}", fact)
+            embedding = self.engine.embed(fact)
+            self.memory.add_fact("consolidated_learning", f"episode_{id}", fact, embedding=embedding)
 
             # 3. Mark as consolidated
             cursor.execute("UPDATE episodic_memory SET consolidated = 1 WHERE id = ?", (id,))

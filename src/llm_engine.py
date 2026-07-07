@@ -14,23 +14,30 @@ class LLMEngine:
     def load_model(self):
         print(f"Loading model from {self.model_path}...")
 
-        # Optimization for 1-2GB RAM:
-        # 1. Lower n_batch to reduce peak RAM
-        # 2. Lower n_ctx if memory is extremely tight
-        # 3. Ensure n_threads is balanced
+        try:
+            from profiles import HardwareProfile
+            settings = HardwareProfile.get_settings()
+        except ImportError:
+            settings = {"n_ctx": 2048, "n_batch": 512}
 
         lora_path = os.getenv("LORA_PATH", "models/refined_model")
 
         self.llm = Llama(
             model_path=self.model_path,
             lora_path=lora_path if os.path.exists(lora_path) else None,
-            n_ctx=int(os.getenv("N_CTX", "2048")),
-            n_batch=int(os.getenv("N_BATCH", "512")),
+            n_ctx=int(os.getenv("N_CTX", str(settings["n_ctx"]))),
+            n_batch=int(os.getenv("N_BATCH", str(settings["n_batch"]))),
             n_threads=int(os.getenv("N_THREADS", str(os.cpu_count()))),
             n_gpu_layers=0,
+            embedding=True, # Enable embeddings for semantic search
             verbose=False
         )
         print("Model loaded successfully" + (f" with adapter from {lora_path}" if os.path.exists(lora_path) else ""))
+
+    def embed(self, text):
+        if not self.llm:
+            return None
+        return self.llm.create_embedding(text)["data"][0]["embedding"]
 
     def generate(self, prompt, max_tokens=512, stop=None):
         if not self.llm:

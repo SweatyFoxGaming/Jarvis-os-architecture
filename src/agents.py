@@ -2,10 +2,12 @@ try:
     from .memory import MemorySystem
     from .llm_engine import LLMEngine
     from .synapse_bridge import SynapseBridge
+    from .profiles import HardwareProfile
 except ImportError:
     from memory import MemorySystem
     from llm_engine import LLMEngine
     from synapse_bridge import SynapseBridge
+    from profiles import HardwareProfile
 
 class BaseAgent:
     def __init__(self, engine: LLMEngine, memory: MemorySystem):
@@ -99,6 +101,12 @@ class CommanderAgent(BaseAgent):
         prompt = f"System: Generate 3 comma-separated keywords for the following: {text}"
         return self.engine.generate(prompt, max_tokens=20)
 
+    def _generate_embedding(self, text):
+        settings = HardwareProfile.get_settings()
+        if settings.get("semantic_search"):
+            return self.engine.embed(text)
+        return None
+
     def handle_request(self, user_input, agents, fast_mode=True):
         # 1. Fast-Path: Combined Audit, Planning, and Decision
         if fast_mode:
@@ -166,7 +174,8 @@ class CommanderAgent(BaseAgent):
             return self.bridge.system_call(cmd, params)
 
         tags = self._generate_tags(user_input + " " + response)
-        self.memory.add_episode(user_input, response, tags=tags)
+        embedding = self._generate_embedding(user_input + " " + response)
+        self.memory.add_episode(user_input, response, tags=tags, embedding=embedding)
         return response
 
 class PlanningAgent(BaseAgent):
@@ -207,11 +216,19 @@ class MemoryAgent(BaseAgent):
         """
         Hierarchical retrieval:
         1. Recent episodic memory (last 5 interactions)
-        2. Relevant semantic facts (keyword search)
+        2. Relevant semantic facts (keyword or vector search)
         3. High-level distilled knowledge
         """
+        settings = HardwareProfile.get_settings()
+
+        if settings.get("semantic_search"):
+            print("[Memory] Performing vector semantic search...")
+            embedding = self.engine.embed(query)
+            knowledge = self.memory.semantic_search(embedding, limit=10)
+        else:
+            knowledge = self.memory.get_semantic_knowledge(limit=10)
+
         recent = self.memory.search_episodes(query, limit=3)
-        knowledge = self.memory.get_semantic_knowledge(limit=10)
 
         context = "--- Recent Interactions ---\n"
         context += "\n".join([f"Q: {r[0]}\nA: {r[1]}" for r in recent])

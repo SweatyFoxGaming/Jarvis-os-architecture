@@ -9,11 +9,24 @@ from llm_engine import LLMEngine
 from memory import MemorySystem
 from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent, PlanningAgent, SecurityAgent, MemoryAgent
 from trainer import PhoenixTrainer
+from profiles import HardwareProfile
 
 def main():
     load_dotenv()
 
     print("--- Phoenix LLM (JARVIS Core) ---")
+
+    # Hardware Profile Selection
+    print("\nSelect Hardware Profile:")
+    print("[1] Low-End (1-2GB RAM)")
+    print("[2] Performance (4GB+ RAM)")
+    p_choice = input("Choice: ").strip()
+    if p_choice == '2':
+        os.environ["HARDWARE_PROFILE"] = HardwareProfile.PERFORMANCE
+        print("Performance profile activated.")
+    else:
+        os.environ["HARDWARE_PROFILE"] = HardwareProfile.LOW
+        print("Low-End profile activated.")
 
     memory = MemorySystem()
     engine = LLMEngine()

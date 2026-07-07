@@ -19,6 +19,7 @@ class MemorySystem:
                 response TEXT,
                 reflection TEXT,
                 tags TEXT,
+                embedding BLOB,
                 success_score INTEGER,
                 consolidated INTEGER DEFAULT 0
             )
@@ -30,26 +31,31 @@ class MemorySystem:
                 category TEXT,
                 key TEXT,
                 value TEXT,
+                embedding BLOB,
                 last_updated TEXT
             )
         ''')
         self.conn.commit()
 
-    def add_episode(self, prompt, response, reflection=None, score=0, tags=None):
+    def add_episode(self, prompt, response, reflection=None, score=0, tags=None, embedding=None):
+        import pickle
         cursor = self.conn.cursor()
         timestamp = datetime.datetime.now().isoformat()
+        emb_blob = pickle.dumps(embedding) if embedding else None
         cursor.execute(
-            "INSERT INTO episodic_memory (timestamp, prompt, response, reflection, tags, success_score) VALUES (?, ?, ?, ?, ?, ?)",
-            (timestamp, prompt, response, reflection, tags, score)
+            "INSERT INTO episodic_memory (timestamp, prompt, response, reflection, tags, embedding, success_score) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (timestamp, prompt, response, reflection, tags, emb_blob, score)
         )
         self.conn.commit()
 
-    def add_fact(self, category, key, value):
+    def add_fact(self, category, key, value, embedding=None):
+        import pickle
         cursor = self.conn.cursor()
         timestamp = datetime.datetime.now().isoformat()
+        emb_blob = pickle.dumps(embedding) if embedding else None
         cursor.execute(
-            "INSERT OR REPLACE INTO semantic_memory (category, key, value, last_updated) VALUES (?, ?, ?, ?)",
-            (category, key, value, timestamp)
+            "INSERT OR REPLACE INTO semantic_memory (category, key, value, embedding, last_updated) VALUES (?, ?, ?, ?, ?)",
+            (category, key, value, emb_blob, timestamp)
         )
         self.conn.commit()
 
@@ -71,6 +77,30 @@ class MemorySystem:
             (limit,)
         )
         return [row[0] for row in cursor.fetchall()]
+
+    def semantic_search(self, query_embedding, table="semantic_memory", limit=5):
+        import pickle
+        import numpy as np
+
+        cursor = self.conn.cursor()
+        cursor.execute(f"SELECT value, embedding FROM {table} WHERE embedding IS NOT NULL")
+        rows = cursor.fetchall()
+
+        if not rows:
+            return []
+
+        results = []
+        q_vec = np.array(query_embedding)
+
+        for value, emb_blob in rows:
+            vec = np.array(pickle.loads(emb_blob))
+            # Cosine similarity
+            score = np.dot(q_vec, vec) / (np.linalg.norm(q_vec) * np.linalg.norm(vec))
+            results.append((value, score))
+
+        # Sort by score descending
+        results.sort(key=lambda x: x[1], reverse=True)
+        return [r[0] for r in results[:limit]]
 
     def get_semantic_knowledge(self, limit=20):
         cursor = self.conn.cursor()
