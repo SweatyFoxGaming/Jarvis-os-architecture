@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from llm_engine import LLMEngine
 from memory import MemorySystem
-from agents import ResearchAgent, CodingAgent, SelfImprovementAgent
+from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent
 from trainer import PhoenixTrainer
 
 def main():
@@ -21,13 +21,25 @@ def main():
     researcher = ResearchAgent(engine, memory)
     coder = CodingAgent(engine, memory)
     improver = SelfImprovementAgent(engine, memory)
+    commander = CommanderAgent(engine, memory)
+
+    agents = {
+        'research': researcher,
+        'coding': coder
+    }
 
     while True:
-        print("\nModes: [1] Chat/Research [2] Coding [3] Reflect [4] Sleep-Learn [q] Quit")
+        print("\nModes: [0] Commander (Auto) [1] Chat/Research [2] Coding [3] Reflect [4] Sleep-Learn [q] Quit")
         choice = input("Select mode: ").strip().lower()
 
         if choice == 'q':
             break
+        elif choice == '0':
+            user_input = input("Request: ")
+            print("\nJARVIS Orchestrating...")
+            res = commander.handle_request(user_input, agents)
+            print(f"\nResponse: {res}")
+            improver.reflect_on_last_interaction()
         elif choice == '1':
             topic = input("Research Topic/Question: ")
             print("\nJARVIS Researching...")
