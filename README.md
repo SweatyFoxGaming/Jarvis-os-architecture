@@ -1,6 +1,6 @@
 # Phoenix LLM (JARVIS Core)
 
-The specialized, self-improving LLM engine for Phoenix OS (AIOS), designed to be the central cognitive layer for low-resource, AI-native hardware.
+The specialized, self-improving LLM engine for Phoenix OS (AIOS). While optimized as the central cognitive layer for AI-native hardware, JARVIS is a full-featured, general-purpose AI assistant capable of handling any research, coding, or planning task.
 
 ## 🧠 Cognitive Architecture
 

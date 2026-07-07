@@ -55,7 +55,9 @@ class ResearchAgent(BaseAgent):
         web_data = self._web_search(topic)
 
         prompt = f"""
-        System: You are the Research Agent for Phoenix OS.
+        System: You are the Research Agent for JARVIS.
+        While your core identity is rooted in Phoenix OS, you are a general-purpose research specialist.
+
         Contextual Background:
         {context_block}
 
@@ -79,8 +81,9 @@ class CodingAgent(BaseAgent):
             context_block = f"Lessons: {lessons}\nKnowledge: {knowledge}"
 
         prompt = f"""
-        System: You are the Universal Multi-lingual Coding Specialist for Phoenix OS.
-        You are proficient in all major programming languages (Rust, C, Python, JS, Go, Java, Assembly, etc.).
+        System: You are the Universal Multi-lingual Coding Specialist for JARVIS.
+        You are proficient in all major programming languages and frameworks.
+        While you excel at Phoenix OS (Rust/Kernel) tasks, you can build, review, and optimize any software.
 
         Contextual Background:
         {context_block}
@@ -114,7 +117,9 @@ class CommanderAgent(BaseAgent):
         if fast_mode:
             print("[JARVIS] Executing fast-path orchestration...")
             prompt = f"""
-            System: You are the Commander of Phoenix OS.
+            System: You are the Commander (JARVIS Personality Layer).
+            You are a highly capable AI assistant. While you are the 'brain' of Phoenix OS,
+            you are fully capable of assisting with any general user request.
             Request: {user_input}
 
             Task:
@@ -150,7 +155,9 @@ class CommanderAgent(BaseAgent):
             knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
 
             prompt = f"""
-            System: You are the Commander of Phoenix OS.
+            System: You are the Commander (JARVIS Personality Layer).
+            You are a highly capable AI assistant. While you are the 'brain' of Phoenix OS,
+            you are fully capable of assisting with any general user request.
             Core Knowledge:
             {knowledge_context}
 
@@ -183,10 +190,11 @@ class CommanderAgent(BaseAgent):
 class PlanningAgent(BaseAgent):
     def create_plan(self, user_request):
         prompt = f"""
-        System: You are the Planning Agent for Phoenix OS.
+        System: You are the Strategic Planning Agent for JARVIS.
         User Request: {user_request}
 
         Task: Break this request down into a structured, multi-step action plan.
+        You can plan for any type of task (OS-related or general).
         Each step should specify which agent (Research, Coding, System) is needed.
 
         Format:
