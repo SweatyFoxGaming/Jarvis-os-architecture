@@ -24,48 +24,48 @@ class ResearchAgent(BaseAgent):
         except Exception as e:
             return f"Web search failed: {e}"
 
-    def research(self, topic):
-        # 1. Retrieve existing knowledge and lessons
-        web_data = self._web_search(topic)
-        existing = self.memory.search_episodes(topic)
-        lessons = self.memory.get_recent_lessons(limit=5)
-        knowledge = self.memory.get_semantic_knowledge(limit=10)
+    def research(self, topic, memory_agent=None):
+        # 1. Use MemoryAgent for hierarchical context if available
+        if memory_agent:
+            context_block = memory_agent.retrieve_context(topic)
+        else:
+            existing = self.memory.search_episodes(topic)
+            lessons = self.memory.get_recent_lessons(limit=5)
+            knowledge = self.memory.get_semantic_knowledge(limit=10)
+            context_block = f"Previous: {existing}\nLessons: {lessons}\nKnowledge: {knowledge}"
 
-        context = "\n".join([f"Previous: {e[0]} -> {e[1]}" for e in existing])
-        lessons_context = "\n".join([f"Lesson Learned: {l}" for l in lessons])
-        knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
+        # 2. Real-time web data
+        web_data = self._web_search(topic)
 
         prompt = f"""
         System: You are the Research Agent for Phoenix OS.
-        Core Knowledge Base:
-        {knowledge_context}
+        Contextual Background:
+        {context_block}
 
         Real-time Web Search Results:
         {web_data}
 
-        Context of previous research: {context}
-        General lessons learned: {lessons_context}
         Topic: {topic}
-        Task: Provide a detailed research report on the topic above. Be factual and concise. Incorporate web search results where relevant.
+        Task: Provide a detailed research report on the topic above. Be factual and concise.
         """
         response = self.engine.generate(prompt)
         self.memory.add_episode(f"Research: {topic}", response)
         return response
 
 class CodingAgent(BaseAgent):
-    def analyze_code(self, code_snippet, task="Review"):
-        lessons = self.memory.get_recent_lessons(limit=5)
-        knowledge = self.memory.get_semantic_knowledge(limit=10)
-
-        context = "\n".join([f"Lesson Learned: {l}" for l in lessons])
-        knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
+    def analyze_code(self, code_snippet, task="Review", memory_agent=None):
+        if memory_agent:
+            context_block = memory_agent.retrieve_context(code_snippet)
+        else:
+            lessons = self.memory.get_recent_lessons(limit=5)
+            knowledge = self.memory.get_semantic_knowledge(limit=10)
+            context_block = f"Lessons: {lessons}\nKnowledge: {knowledge}"
 
         prompt = f"""
         System: You are the Coding Agent for Phoenix OS.
-        Core Knowledge Base:
-        {knowledge_context}
+        Contextual Background:
+        {context_block}
 
-        Lessons from experience: {context}
         Code:
         {code_snippet}
 
@@ -81,34 +81,39 @@ class CommanderAgent(BaseAgent):
         self.bridge = SynapseBridge()
 
     def handle_request(self, user_input, agents):
+        # 1. Security Audit
+        audit = agents['security'].audit_request(user_input)
+        if "STATUS: DENIED" in audit:
+            return audit
+
+        # 2. Planning (for complex requests)
+        plan = agents['planning'].create_plan(user_input)
+        print(f"\n[JARVIS Plan]:\n{plan}\n")
+
+        # 3. Execution (Simulated multi-step for now)
         knowledge = self.memory.get_semantic_knowledge(limit=10)
         knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
 
         prompt = f"""
-        System: You are the Commander of Phoenix OS (JARVIS Personality Layer).
-        You are professional, calm, and highly capable.
+        System: You are the Commander of Phoenix OS.
         Core Knowledge:
         {knowledge_context}
 
         User Request: {user_input}
+        Proposed Plan: {plan}
 
-        Task: Analyze the user request. Decide if you should:
-        1. Handle it yourself (general chat).
-        2. Delegate to an agent: "DELEGATE: [Agent Name] - [Instructions]"
-        3. Execute a system command: "SYSTEM: [Command] - [Params]"
-
-        System commands available: GET_STATS, LIST_FILES, REBOOT.
+        Task: Execute the plan. If delegation is needed, use DELEGATE: [Agent] or SYSTEM: [Command].
         """
         response = self.engine.generate(prompt)
 
         if "DELEGATE: Research" in response:
             parts = response.split("-")
             topic = parts[1].strip() if len(parts) > 1 else user_input
-            return agents['research'].research(topic)
+            return agents['research'].research(topic, memory_agent=agents['memory'])
         elif "DELEGATE: Coding" in response:
             parts = response.split("-")
             snippet = parts[1].strip() if len(parts) > 1 else user_input
-            return agents['coding'].analyze_code(snippet)
+            return agents['coding'].analyze_code(snippet, memory_agent=agents['memory'])
         elif "SYSTEM:" in response:
             cmd_part = response.split("SYSTEM:")[1].strip()
             cmd = cmd_part.split("-")[0].strip()
@@ -117,6 +122,80 @@ class CommanderAgent(BaseAgent):
 
         self.memory.add_episode(user_input, response)
         return response
+
+class PlanningAgent(BaseAgent):
+    def create_plan(self, user_request):
+        prompt = f"""
+        System: You are the Planning Agent for Phoenix OS.
+        User Request: {user_request}
+
+        Task: Break this request down into a structured, multi-step action plan.
+        Each step should specify which agent (Research, Coding, System) is needed.
+
+        Format:
+        PLAN:
+        1. [Agent] - [Task Description]
+        2. [Agent] - [Task Description]
+        ...
+        """
+        plan = self.engine.generate(prompt)
+        return plan
+
+class SecurityAgent(BaseAgent):
+    def audit_request(self, request, context=""):
+        prompt = f"""
+        System: You are the Security Agent for Phoenix OS.
+        You operate on a Capability-Based Security model.
+
+        Request: {request}
+        Context: {context}
+
+        Task: Analyze the request for potential security risks, unauthorized access, or harmful commands.
+        Respond with "STATUS: APPROVED" or "STATUS: DENIED - [Reason]".
+        """
+        audit = self.engine.generate(prompt)
+        return audit
+
+class MemoryAgent(BaseAgent):
+    def retrieve_context(self, query):
+        """
+        Hierarchical retrieval:
+        1. Recent episodic memory (last 5 interactions)
+        2. Relevant semantic facts (keyword search)
+        3. High-level distilled knowledge
+        """
+        recent = self.memory.search_episodes(query, limit=3)
+        knowledge = self.memory.get_semantic_knowledge(limit=10)
+
+        context = "--- Recent Interactions ---\n"
+        context += "\n".join([f"Q: {r[0]}\nA: {r[1]}" for r in recent])
+        context += "\n\n--- Core Knowledge ---\n"
+        context += "\n".join([f"Fact: {k}" for k in knowledge])
+
+        return context
+
+    def summarize_experience(self):
+        """
+        Summarizes old memories to free up space/context while retaining key facts.
+        """
+        # Fetch 20 oldest unconsolidated episodes
+        cursor = self.memory.conn.cursor()
+        cursor.execute("SELECT prompt, response FROM episodic_memory WHERE consolidated = 0 LIMIT 20")
+        rows = cursor.fetchall()
+
+        if len(rows) < 10:
+            return "Not enough experience to summarize yet."
+
+        summary_prompt = f"""
+        System: You are the Memory Agent for Phoenix OS.
+        Experiences:
+        {" ".join([f"({r[0]}, {r[1]})" for r in rows])}
+
+        Task: Summarize these experiences into 3 core insights for the long-term semantic memory.
+        """
+        summary = self.engine.generate(summary_prompt)
+        self.memory.add_fact("experience_summary", "auto_summary", summary)
+        return summary
 
 class SelfImprovementAgent(BaseAgent):
     def reflect_on_last_interaction(self):

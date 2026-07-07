@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from llm_engine import LLMEngine
 from memory import MemorySystem
-from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent
+from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent, PlanningAgent, SecurityAgent, MemoryAgent
 from trainer import PhoenixTrainer
 
 def main():
@@ -21,11 +21,17 @@ def main():
     researcher = ResearchAgent(engine, memory)
     coder = CodingAgent(engine, memory)
     improver = SelfImprovementAgent(engine, memory)
+    planner = PlanningAgent(engine, memory)
+    security = SecurityAgent(engine, memory)
+    mem_agent = MemoryAgent(engine, memory)
     commander = CommanderAgent(engine, memory)
 
     agents = {
         'research': researcher,
-        'coding': coder
+        'coding': coder,
+        'planning': planner,
+        'security': security,
+        'memory': mem_agent
     }
 
     while True:
