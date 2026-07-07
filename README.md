@@ -8,7 +8,7 @@ Phoenix LLM (JARVIS) uses a multi-agent orchestration model designed to balance 
 
 ### 1. Multi-Agent Swarm
 - **Commander (Personality Layer)**: The primary interface. It handles general chat, maintains the JARVIS persona (calm, capable, professional), and orchestrates tasks by delegating to specialized agents or calling system functions.
-- **Research Agent**: Specialized in multi-source information gathering. It integrates **real-time web search** (via DuckDuckGo) and cross-references results with local memory.
+- **Research Agent**: Specialized in multi-source information gathering. It integrates **real-time web search** (via Brave Search API) and cross-references results with local memory.
 - **Coding Agent**: Specialized in code analysis, debugging, and review. It is pre-seeded with knowledge of the Phoenix OS (Rust/no_std) kernel architecture.
 - **Planning Agent**: Decomposes complex, multi-stage requests into structured action plans.
 - **Security Agent**: Audits every request against a capability-based security model before execution.
@@ -50,6 +50,7 @@ The `src/seed_knowledge.py` script allows JARVIS to ingest core system documenta
 
 1. **Dependencies**: `pip install -r requirements.txt`
 2. **Model**: Download a GGUF model (recommended: `phi-2.Q4_K_M.gguf`) into the `models/` directory.
+3. **API Keys**: Add your `BRAVE_API_KEY` to the `.env` file.
 3. **Seed Knowledge**: Run `export PYTHONPATH=$PYTHONPATH:. && python3 src/seed_knowledge.py` to ingest AIOS docs.
 4. **Run**: `python3 src/main.py`
 

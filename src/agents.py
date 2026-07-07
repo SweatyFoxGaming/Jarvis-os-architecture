@@ -12,17 +12,32 @@ class BaseAgent:
         self.engine = engine
         self.memory = memory
 
-from duckduckgo_search import DDGS
+import os
+import requests
 
 class ResearchAgent(BaseAgent):
     def _web_search(self, query):
-        print(f"Searching web for: {query}...")
+        print(f"Searching Brave for: {query}...")
+        api_key = os.getenv("BRAVE_API_KEY")
+        if not api_key:
+            return "Brave API key not found in .env"
+
+        url = "https://api.search.brave.com/res/v1/web/search"
+        headers = {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "X-Subscription-Token": api_key
+        }
+        params = {"q": query, "count": 3}
+
         try:
-            with DDGS() as ddgs:
-                results = [r for r in ddgs.text(query, max_results=3)]
-                return "\n".join([f"{r['title']}: {r['body']}" for r in results])
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("web", {}).get("results", [])
+            return "\n".join([f"{r['title']}: {r['description']}" for r in results])
         except Exception as e:
-            return f"Web search failed: {e}"
+            return f"Brave search failed: {e}"
 
     def research(self, topic, memory_agent=None):
         # 1. Use MemoryAgent for hierarchical context if available
