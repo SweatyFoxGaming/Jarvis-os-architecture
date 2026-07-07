@@ -1,3 +1,4 @@
 llama-cpp-python
 python-dotenv
 requests
+numpy

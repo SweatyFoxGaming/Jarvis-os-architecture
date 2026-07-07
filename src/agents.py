@@ -130,12 +130,15 @@ class CommanderAgent(BaseAgent):
 
     def _detect_unknown_language(self, text):
         # List of languages JARVIS "knows" (could be expanded by checking DB)
-        known = ["rust", "python", "c", "cpp", "javascript", "go", "java", "assembly"]
-        words = text.lower().split()
-        for w in words:
-            if w in known: return None
-        # Simple heuristic: if a common tech keyword is found but not in known list
-        potential = ["zig", "mojo", "swift", "kotlin", "elixir", "haskell"]
+        known = ["rust", "python", "c", "cpp", "javascript", "go", "java", "assembly", "bash", "shell"]
+        words = set(text.lower().replace("?", "").replace(".", "").replace(",", "").split())
+
+        # Check if any known language is in the query - if so, we don't need to onboard
+        if any(k in words for k in known):
+            return None
+
+        # Common tech keywords that suggest a new language request
+        potential = ["zig", "mojo", "swift", "kotlin", "elixir", "haskell", "lua", "dart", "ruby", "clojure"]
         for p in potential:
             if p in words: return p
         return None
@@ -146,7 +149,8 @@ class CommanderAgent(BaseAgent):
         if unknown:
             print(f"[JARVIS] New language detected: {unknown}. Autonomous onboarding triggered.")
             research_data = agents['research'].research(f"Core principles and best practices of {unknown} programming language")
-            self.memory.add_fact("language_principle", unknown, research_data)
+            embedding = self.engine.embed(research_data)
+            self.memory.add_fact("language_principle", unknown, research_data, embedding=embedding)
 
         # 1. Fast-Path: Combined Audit, Planning, and Decision
         if fast_mode:
@@ -266,12 +270,14 @@ class MemoryAgent(BaseAgent):
         """
         settings = HardwareProfile.get_settings()
 
+        knowledge = self.memory.get_semantic_knowledge(limit=5) # Always get most recent facts
+
         if settings.get("semantic_search"):
             print("[Memory] Performing vector semantic search...")
             embedding = self.engine.embed(query)
-            knowledge = self.memory.semantic_search(embedding, limit=10)
-        else:
-            knowledge = self.memory.get_semantic_knowledge(limit=10)
+            semantic_knowledge = self.memory.semantic_search(embedding, limit=5)
+            # Merge and deduplicate
+            knowledge = list(set(knowledge + semantic_knowledge))
 
         recent = self.memory.search_episodes(query, limit=3)
 

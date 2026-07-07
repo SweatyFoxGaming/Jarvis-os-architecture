@@ -95,7 +95,8 @@ def main():
             # 1. Research the language
             knowledge = researcher.research(f"Core principles and best practices of {lang} programming language")
             # 2. Add to semantic memory
-            memory.add_fact("language_principle", lang, knowledge)
+            embedding = engine.embed(knowledge)
+            memory.add_fact("language_principle", lang, knowledge, embedding=embedding)
             print(f"\nJARVIS has integrated {lang} into its core knowledge base.")
         else:
             print("Invalid choice.")

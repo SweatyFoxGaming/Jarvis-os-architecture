@@ -1,6 +1,8 @@
 import sqlite3
 import os
 import datetime
+import pickle
+import numpy as np
 
 class MemorySystem:
     def __init__(self, db_path="data/memory.db"):
@@ -48,7 +50,6 @@ class MemorySystem:
         self.conn.commit()
 
     def add_episode(self, prompt, response, reflection=None, score=0, tags=None, embedding=None):
-        import pickle
         cursor = self.conn.cursor()
         timestamp = datetime.datetime.now().isoformat()
         emb_blob = pickle.dumps(embedding) if embedding else None
@@ -59,7 +60,6 @@ class MemorySystem:
         self.conn.commit()
 
     def add_fact(self, category, key, value, embedding=None):
-        import pickle
         cursor = self.conn.cursor()
         timestamp = datetime.datetime.now().isoformat()
         emb_blob = pickle.dumps(embedding) if embedding else None
@@ -89,9 +89,6 @@ class MemorySystem:
         return [row[0] for row in cursor.fetchall()]
 
     def semantic_search(self, query_embedding, table="semantic_memory", limit=5):
-        import pickle
-        import numpy as np
-
         cursor = self.conn.cursor()
         cursor.execute(f"SELECT value, embedding FROM {table} WHERE embedding IS NOT NULL")
         rows = cursor.fetchall()

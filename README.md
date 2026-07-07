@@ -13,8 +13,12 @@ Phoenix LLM (JARVIS) uses a multi-agent orchestration model designed to balance 
 - **Planning Agent**: Decomposes complex, multi-stage requests into structured action plans.
 - **Security Agent**: Audits every request against a capability-based security model before execution.
 - **Memory Agent**: Manages hierarchical retrieval (Episodic + Semantic) and autonomous experience summarization.
+- **Self-Improvement Agent**: Oversees the reflection and meta-learning cycles to refine system prompts and behavioral logic.
 
-### 2. Agent Workflow (The Chain of Command)
+### 2. Universal Multi-lingual Specialist
+JARVIS is pre-seeded with core principles for **Rust, C, C++, Python, JS, Go, Java, and Assembly**. If you request assistance with a technology it hasn't mastered yet, JARVIS will autonomously trigger its research swarm to onboard the new language or framework before assisting you.
+
+### 3. Agent Workflow (The Chain of Command)
 When you issue a request to the **Commander [Mode 0]**, the following lifecycle occurs:
 1. **Security Audit**: The Security Agent checks the request for risks or unauthorized system commands.
 2. **Strategic Planning**: The Planning Agent breaks the request into logical steps (e.g., "Step 1: Research X, Step 2: Write code for Y").
