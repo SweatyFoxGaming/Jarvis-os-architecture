@@ -2,3 +2,8 @@ llama-cpp-python
 python-dotenv
 requests
 numpy
+PyQt6
+psutil
+pyttsx3
+speechrecognition
+pyinstaller
