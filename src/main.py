@@ -108,7 +108,9 @@ def main():
     elif i_choice == '3':
         import uvicorn
         print("Launching Web Dashboard on http://localhost:8000")
-        uvicorn.run("src.api:app", host="0.0.0.0", port=8000, reload=False)
+        # Add src to python path for uvicorn
+        sys.path.append(os.path.join(os.getcwd(), "src"))
+        uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
         sys.exit(0)
 
     while True:
