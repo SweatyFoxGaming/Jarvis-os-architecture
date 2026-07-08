@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QLineEdit, QLabel, QFrame
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette, QFont
 
 class Panel(QFrame):
@@ -28,6 +28,20 @@ class Panel(QFrame):
         self.setLayout(self.layout)
 
 from voice import VoiceInterface
+
+class JarvisWorker(QThread):
+    response_ready = pyqtSignal(str)
+
+    def __init__(self, message, agents):
+        super().__init__()
+        self.message = message
+        self.agents = agents
+
+    def run(self):
+        response = self.agents['commander'].handle_request(self.message, self.agents)
+        if 'improver' in self.agents:
+            self.agents['improver'].reflect_on_last_interaction()
+        self.response_ready.emit(response)
 
 class AmbientUI(QMainWindow):
     def __init__(self, engine, memory, agents):
@@ -98,15 +112,22 @@ class AmbientUI(QMainWindow):
         self.chat_input.clear()
         self.add_chat("You", text)
 
-        # JARVIS Process
-        self.add_chat("JARVIS", "Thinking...")
-        response = self.agents['commander'].handle_request(text, self.agents)
+        self.add_chat("JARVIS", "<i>Processing request...</i>")
+
+        # Non-blocking processing
+        self.worker = JarvisWorker(text, self.agents)
+        self.worker.response_ready.connect(self.handle_response)
+        self.worker.start()
+
+    def handle_response(self, response):
+        # Remove the "Processing..." line
+        cursor = self.chat_panel.display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.select(cursor.SelectionType.LineUnderCursor)
+        cursor.removeSelectedText()
+
         self.add_chat("JARVIS", response)
         self.voice.speak(response)
-
-        # Autonomous Self-Improvement
-        if 'improver' in self.agents:
-            self.agents['improver'].reflect_on_last_interaction()
 
     def submit_command(self):
         cmd = self.command_input.text().strip()

@@ -44,13 +44,26 @@ class LLMEngine:
         if not self.llm:
             return "Error: LLM not initialized. Model might be missing."
 
+        try:
+            from templates import PromptTemplate
+            formatted_prompt = PromptTemplate.format(prompt)
+        except ImportError:
+            formatted_prompt = prompt
+
+        print(f"[LLM] Prompting {len(formatted_prompt)} chars...")
+
         output = self.llm(
-            prompt,
+            formatted_prompt,
             max_tokens=max_tokens,
-            stop=stop or ["Q:", "User:"],
+            stop=stop or ["Instruct:", "User:", "###", "<|end_of_text|>", "<|eot_id|>", "Q:", "A:"],
             echo=False
         )
-        return output["choices"][0]["text"].strip()
+        res = output["choices"][0]["text"].strip()
+
+        if not res:
+            return "JARVIS: [The model returned an empty response. Check if n_ctx is too small or prompt is invalid.]"
+
+        return res
 
 if __name__ == "__main__":
     # Test initialization

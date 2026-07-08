@@ -25,6 +25,9 @@ def get_resource_path(relative_path):
 import logging
 
 def main():
+    # Set app identity
+    os.environ["APP_IDENTITY"] = "JARVIS-COGNITIVE-ENGINE"
+
     # Setup logging
     log_path = "/tmp/jarvis_startup.log"
     logging.basicConfig(filename=log_path, level=logging.DEBUG,
