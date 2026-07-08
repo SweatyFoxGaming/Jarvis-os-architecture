@@ -70,9 +70,10 @@ class LLMEngine:
                 stream=True
             )
             for chunk in output:
-                token = chunk["choices"][0]["text"]
-                if token:
-                    yield token
+                if "choices" in chunk and len(chunk["choices"]) > 0:
+                    token = chunk["choices"][0].get("text", "")
+                    if token:
+                        yield token
         else:
             output = self.llm(
                 formatted_prompt,

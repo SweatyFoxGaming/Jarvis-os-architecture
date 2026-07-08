@@ -83,11 +83,15 @@
                     if (done) break;
 
                     const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
+                    const lines = chunk.split('\n\n');
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
-                            const token = line.replace('data: ', '');
-                            jarvisDiv.innerHTML += token;
+                            const token = line.substring(6);
+                            if (token === "[DONE]") break;
+
+                            // Replace newlines with <br> and handle spaces
+                            const cleanToken = token.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+                            jarvisDiv.innerHTML += cleanToken;
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
                     }

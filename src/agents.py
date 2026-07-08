@@ -246,6 +246,16 @@ class CommanderAgent(BaseAgent):
                 if m in response:
                     response = response.split(m)[-1].strip()
 
+        # For streaming, we wrap the generator to record the full response at the end
+        if stream and not isinstance(response, str):
+            def _stream_recorder():
+                full_text = ""
+                for token in response:
+                    full_text += token
+                    yield token
+                self.memory.add_episode(user_input, full_text)
+            return _stream_recorder()
+
         if not stream:
             self.memory.add_episode(user_input, str(response))
         return response
