@@ -141,6 +141,9 @@ class AmbientUI(QMainWindow):
         self.chat_panel.display.ensureCursorVisible()
 
     def finalize_response(self, full_response):
+        # If the display is empty (meaning no streaming happened), show full response
+        if self.cursor.atStart() or self.chat_panel.display.toPlainText().endswith("JARVIS: "):
+            self.cursor.insertText(full_response)
         self.voice.speak(full_response)
 
     def submit_command(self):

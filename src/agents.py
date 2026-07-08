@@ -153,7 +153,10 @@ class CommanderAgent(BaseAgent):
         greetings = ["hi", "hello", "hey", "jarvis"]
         if user_input.lower() in greetings:
             msg = "Hello. How can I assist you with Phoenix OS today?"
-            if stream: return (t for t in msg.split())
+            if stream:
+                def _gen():
+                    for t in msg.split(): yield t + " "
+                return _gen()
             return msg
 
         # 1. Autonomous Language Onboarding
@@ -220,11 +223,11 @@ class CommanderAgent(BaseAgent):
             """
             response = self.engine.generate(prompt)
 
-        if "DELEGATE: Research" in response:
+        if "DELEGATE: Research" in response or "Research" in response:
             parts = response.split("-")
             topic = parts[1].strip() if len(parts) > 1 else user_input
             return agents['research'].research(topic, memory_agent=agents['memory'], stream=stream)
-        elif "DELEGATE: Coding" in response:
+        elif "DELEGATE: Coding" in response or "Coding" in response:
             parts = response.split("-")
             snippet = parts[1].strip() if len(parts) > 1 else user_input
             return agents['coding'].analyze_code(snippet, memory_agent=agents['memory'], stream=stream)
@@ -236,8 +239,15 @@ class CommanderAgent(BaseAgent):
 
         tags = self._generate_tags(user_input + " " + response)
         embedding = self._generate_embedding(user_input + " " + response)
+        # Strip internal protocol markers if they leaked into chat
+        markers = ["ACTION:", "CHAT:", "PLAN:", "AUDIT: APPROVED", "AUDIT:"]
+        if isinstance(response, str):
+            for m in markers:
+                if m in response:
+                    response = response.split(m)[-1].strip()
+
         if not stream:
-            self.memory.add_episode(user_input, response)
+            self.memory.add_episode(user_input, str(response))
         return response
 
 class PlanningAgent(BaseAgent):
@@ -286,12 +296,13 @@ class MemoryAgent(BaseAgent):
 
         knowledge = self.memory.get_semantic_knowledge(limit=5) # Always get most recent facts
 
-        if settings.get("semantic_search"):
+        if settings.get("semantic_search") and query:
             print("[Memory] Performing vector semantic search...")
             embedding = self.engine.embed(query)
-            semantic_knowledge = self.memory.semantic_search(embedding, limit=5)
-            # Merge and deduplicate
-            knowledge = list(set(knowledge + semantic_knowledge))
+            if embedding:
+                semantic_knowledge = self.memory.semantic_search(embedding, limit=5)
+                # Merge and deduplicate
+                knowledge = list(set(knowledge + semantic_knowledge))
 
         recent = self.memory.search_episodes(query, limit=3)
 
