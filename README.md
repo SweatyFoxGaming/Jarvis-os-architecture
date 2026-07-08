@@ -80,7 +80,7 @@ pip3 install -r requirements.txt
 ```
 
 ### 5. Configuration
-- **Model**: Download a GGUF model (e.g., `phi-2.Q4_K_M.gguf`) into the `models/` directory.
+- **Model**: JARVIS now automatically downloads the **Dolphin-Phi-2** model on first launch. No manual download is required.
 - **API Keys**: Add your `BRAVE_API_KEY` to the `.env` file.
 - **Seed Knowledge**: Run `export PYTHONPATH=$PYTHONPATH:. && python3 src/seed_knowledge.py` to ingest AIOS docs.
 

@@ -10,6 +10,7 @@ from memory import MemorySystem
 from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent, PlanningAgent, SecurityAgent, MemoryAgent
 from trainer import PhoenixTrainer
 from profiles import HardwareProfile
+from downloader import download_model
 from gui import AmbientUI
 from PyQt6.QtWidgets import QApplication
 
@@ -58,6 +59,13 @@ def main():
 
         memory = MemorySystem()
         engine = LLMEngine()
+        if not engine.llm:
+            window.add_chat("System", "Brain not found. Downloading...")
+            app.processEvents()
+            if download_model():
+                engine.load_model()
+            else:
+                window.add_chat("System", "Download failed. Check connection.")
 
         agents = {
             'research': ResearchAgent(engine, memory),
@@ -85,7 +93,15 @@ def main():
     os.environ["HARDWARE_PROFILE"] = HardwareProfile.PERFORMANCE if p_choice == '2' else HardwareProfile.LOW
 
     memory = MemorySystem()
+
+    # Ensure model exists
     engine = LLMEngine()
+    if not engine.llm:
+        print("\nJARVIS Brain not found. Attempting automatic download...")
+        if download_model():
+            engine.load_model()
+        else:
+            print("Failed to download brain. Please check your internet connection.")
 
     agents = {
         'research': ResearchAgent(engine, memory),

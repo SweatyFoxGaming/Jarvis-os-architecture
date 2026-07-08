@@ -11,3 +11,4 @@ fastapi
 uvicorn
 pydantic
 pyaudio
+huggingface_hub

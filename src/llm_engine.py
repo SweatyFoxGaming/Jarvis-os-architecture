@@ -10,7 +10,7 @@ class LLMEngine:
         else:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        default_path = os.path.join(base_dir, "models/phi-2.Q4_K_M.gguf")
+        default_path = os.path.join(base_dir, "models/dolphin-2_6-phi-2.Q4_K_M.gguf")
         self.model_path = model_path or os.getenv("MODEL_PATH", default_path)
         self.llm = None
 
@@ -55,7 +55,8 @@ class LLMEngine:
 
         try:
             from templates import PromptTemplate
-            formatted_prompt = PromptTemplate.format(prompt)
+            # Dolphin model uses ChatML
+            formatted_prompt = PromptTemplate.format(prompt, model_type=PromptTemplate.CHATML)
         except ImportError:
             formatted_prompt = prompt
 
