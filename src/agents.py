@@ -202,6 +202,7 @@ class CommanderAgent(BaseAgent):
             print(f"\n[JARVIS Plan]:\n{plan}\n")
 
             # 3. Execution (Simulated multi-step for now)
+            self.memory.add_episode(user_input, "Multi-step plan initiated.")
             knowledge = self.memory.get_semantic_knowledge(limit=10)
             knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
 

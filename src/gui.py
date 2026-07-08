@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QLineEdit, QLabel, QFrame
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt6.QtGui import QColor, QPalette, QFont, QTextCursor
 from PyQt6.QtGui import QColor, QPalette, QFont
 
 class Panel(QFrame):
@@ -127,7 +128,7 @@ class AmbientUI(QMainWindow):
 
         self.chat_panel.display.append(f"<b>JARVIS:</b> ")
         self.cursor = self.chat_panel.display.textCursor()
-        self.cursor.movePosition(self.cursor.MoveOperation.End)
+        self.cursor.movePosition(QTextCursor.MoveOperation.End)
 
         # Non-blocking streaming
         self.worker = JarvisWorker(text, self.agents)

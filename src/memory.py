@@ -12,7 +12,9 @@ class MemorySystem:
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, "memory.db")
 
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        dir_name = os.path.dirname(db_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
         self.conn = sqlite3.connect(db_path)
         self.create_tables()
 

@@ -47,8 +47,9 @@ async def chat(request: ChatRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-# OpenAI Compatibility Layer
+# OpenAI Compatibility Layer (with common aliases)
 @app.get("/v1/models")
+@app.get("/api/v1/models")
 async def list_models():
     return {
         "object": "list",
@@ -63,10 +64,30 @@ async def list_models():
     }
 
 @app.post("/v1/chat/completions")
+@app.post("/api/v1/chat/completions")
 async def chat_completions(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
     user_msg = messages[-1]["content"] if messages else ""
+    stream_requested = data.get("stream", False)
+
+    if stream_requested:
+        stream = agents['commander'].handle_request(user_msg, agents, stream=True)
+        async def event_generator():
+            import time
+            import json
+            for token in stream:
+                chunk = {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": "jarvis-cognitive-engine",
+                    "choices": [{"index": 0, "delta": {"content": token}, "finish_reason": None}]
+                }
+                yield f"data: {json.dumps(chunk)}\n\n"
+            yield "data: [DONE]\n\n"
+            agents['improver'].reflect_on_last_interaction()
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     response = agents['commander'].handle_request(user_msg, agents)
     agents['improver'].reflect_on_last_interaction()
@@ -86,6 +107,11 @@ async def chat_completions(request: Request):
             "finish_reason": "stop"
         }]
     }
+
+@app.get("/props")
+@app.get("/health")
+async def props():
+    return {"status": "up", "version": "1.5.0", "name": "JARVIS"}
 
 @app.get("/api/status")
 async def get_status():

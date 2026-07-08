@@ -10,3 +10,4 @@ pyinstaller
 fastapi
 uvicorn
 pydantic
+pyaudio
