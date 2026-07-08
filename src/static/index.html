@@ -66,6 +66,7 @@
             chatInput.value = '';
 
             appendMessage('You', msg);
+            const jarvisDiv = appendMessage('JARVIS', '');
 
             try {
                 const response = await fetch('/api/chat', {
@@ -73,8 +74,24 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: msg })
                 });
-                const data = await response.json();
-                appendMessage('JARVIS', data.response);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const token = line.replace('data: ', '');
+                            jarvisDiv.innerHTML += token;
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    }
+                }
             } catch (err) {
                 appendMessage('System', 'Error communicating with JARVIS.');
             }
@@ -85,6 +102,7 @@
             div.innerHTML = `<b class="${sender === 'You' ? 'text-white' : 'text-cyan-400'}">${sender}:</b> ${text}`;
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
+            return div;
         }
 
         async function updateStatus() {

@@ -40,9 +40,11 @@ class LLMEngine:
             return None
         return self.llm.create_embedding(text)["data"][0]["embedding"]
 
-    def generate(self, prompt, max_tokens=512, stop=None):
+    def generate(self, prompt, max_tokens=512, stop=None, stream=False):
         if not self.llm:
-            return "Error: LLM not initialized. Model might be missing."
+            if stream: yield "Error: LLM not initialized."
+            else: return "Error: LLM not initialized."
+            return
 
         try:
             from templates import PromptTemplate
@@ -50,20 +52,29 @@ class LLMEngine:
         except ImportError:
             formatted_prompt = prompt
 
-        print(f"[LLM] Prompting {len(formatted_prompt)} chars...")
+        stop_seq = stop or ["Instruct:", "User:", "###", "<|end_of_text|>", "<|eot_id|>", "Q:", "A:"]
 
-        output = self.llm(
-            formatted_prompt,
-            max_tokens=max_tokens,
-            stop=stop or ["Instruct:", "User:", "###", "<|end_of_text|>", "<|eot_id|>", "Q:", "A:"],
-            echo=False
-        )
-        res = output["choices"][0]["text"].strip()
-
-        if not res:
-            return "JARVIS: [The model returned an empty response. Check if n_ctx is too small or prompt is invalid.]"
-
-        return res
+        if stream:
+            output = self.llm(
+                formatted_prompt,
+                max_tokens=max_tokens,
+                stop=stop_seq,
+                echo=False,
+                stream=True
+            )
+            for chunk in output:
+                token = chunk["choices"][0]["text"]
+                if token:
+                    yield token
+        else:
+            output = self.llm(
+                formatted_prompt,
+                max_tokens=max_tokens,
+                stop=stop_seq,
+                echo=False
+            )
+            res = output["choices"][0]["text"].strip()
+            return res if res else "JARVIS: [Empty response]"
 
 if __name__ == "__main__":
     # Test initialization

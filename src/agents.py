@@ -41,7 +41,7 @@ class ResearchAgent(BaseAgent):
         except Exception as e:
             return f"Brave search failed: {e}"
 
-    def research(self, topic, memory_agent=None):
+    def research(self, topic, memory_agent=None, stream=False):
         # 1. Use MemoryAgent for hierarchical context if available
         if memory_agent:
             context_block = memory_agent.retrieve_context(topic)
@@ -67,12 +67,15 @@ class ResearchAgent(BaseAgent):
         Topic: {topic}
         Task: Provide a detailed research report on the topic above. Be factual and concise.
         """
-        response = self.engine.generate(prompt)
-        self.memory.add_episode(f"Research: {topic}", response)
-        return response
+        if stream:
+            return self.engine.generate(prompt, stream=True)
+        else:
+            response = self.engine.generate(prompt)
+            self.memory.add_episode(f"Research: {topic}", response)
+            return response
 
 class CodingAgent(BaseAgent):
-    def analyze_code(self, code_snippet, task="Review", memory_agent=None):
+    def analyze_code(self, code_snippet, task="Review", memory_agent=None, stream=False):
         if memory_agent:
             context_block = memory_agent.retrieve_context(code_snippet)
         else:
@@ -108,10 +111,12 @@ class CodingAgent(BaseAgent):
 
         Provide the final, polished code and explanation.
         """
-        final_response = self.engine.generate(correction_prompt)
-
-        self.memory.add_episode(f"Code Analysis ({task})", final_response)
-        return final_response
+        if stream:
+            return self.engine.generate(correction_prompt, stream=True)
+        else:
+            final_response = self.engine.generate(correction_prompt)
+            self.memory.add_episode(f"Code Analysis ({task})", final_response)
+            return final_response
 
 class CommanderAgent(BaseAgent):
     def __init__(self, engine, memory):
@@ -143,8 +148,15 @@ class CommanderAgent(BaseAgent):
             if p in words: return p
         return None
 
-    def handle_request(self, user_input, agents, fast_mode=True):
-        # 0. Autonomous Language Onboarding
+    def handle_request(self, user_input, agents, fast_mode=True, stream=False):
+        # 0. Fast-exit for simple greetings to reduce latency
+        greetings = ["hi", "hello", "hey", "jarvis"]
+        if user_input.lower() in greetings:
+            msg = "Hello. How can I assist you with Phoenix OS today?"
+            if stream: return (t for t in msg.split())
+            return msg
+
+        # 1. Autonomous Language Onboarding
         unknown = self._detect_unknown_language(user_input)
         if unknown:
             print(f"[JARVIS] New language detected: {unknown}. Autonomous onboarding triggered.")
@@ -210,11 +222,11 @@ class CommanderAgent(BaseAgent):
         if "DELEGATE: Research" in response:
             parts = response.split("-")
             topic = parts[1].strip() if len(parts) > 1 else user_input
-            return agents['research'].research(topic, memory_agent=agents['memory'])
+            return agents['research'].research(topic, memory_agent=agents['memory'], stream=stream)
         elif "DELEGATE: Coding" in response:
             parts = response.split("-")
             snippet = parts[1].strip() if len(parts) > 1 else user_input
-            return agents['coding'].analyze_code(snippet, memory_agent=agents['memory'])
+            return agents['coding'].analyze_code(snippet, memory_agent=agents['memory'], stream=stream)
         elif "SYSTEM:" in response:
             cmd_part = response.split("SYSTEM:")[1].strip()
             cmd = cmd_part.split("-")[0].strip()
@@ -223,7 +235,8 @@ class CommanderAgent(BaseAgent):
 
         tags = self._generate_tags(user_input + " " + response)
         embedding = self._generate_embedding(user_input + " " + response)
-        self.memory.add_episode(user_input, response, tags=tags, embedding=embedding)
+        if not stream:
+            self.memory.add_episode(user_input, response)
         return response
 
 class PlanningAgent(BaseAgent):

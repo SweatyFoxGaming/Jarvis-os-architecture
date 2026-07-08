@@ -2,7 +2,7 @@ import os
 import sys
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import psutil
 
@@ -34,9 +34,18 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    response = agents['commander'].handle_request(request.message, agents)
-    agents['improver'].reflect_on_last_interaction()
-    return {"response": response}
+    # Determine if streaming is requested
+    stream = agents['commander'].handle_request(request.message, agents, stream=True)
+
+    async def event_generator():
+        full_response = ""
+        for token in stream:
+            full_response += token
+            yield f"data: {token}\n\n"
+        # Reflect after stream
+        agents['improver'].reflect_on_last_interaction()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # OpenAI Compatibility Layer
 @app.get("/v1/models")
