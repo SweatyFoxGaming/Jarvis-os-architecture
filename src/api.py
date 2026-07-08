@@ -38,6 +38,46 @@ async def chat(request: ChatRequest):
     agents['improver'].reflect_on_last_interaction()
     return {"response": response}
 
+# OpenAI Compatibility Layer
+@app.get("/v1/models")
+async def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "jarvis-cognitive-engine",
+                "object": "model",
+                "created": 1677610602,
+                "owned_by": "phoenix-os"
+            }
+        ]
+    }
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: Request):
+    data = await request.json()
+    messages = data.get("messages", [])
+    user_msg = messages[-1]["content"] if messages else ""
+
+    response = agents['commander'].handle_request(user_msg, agents)
+    agents['improver'].reflect_on_last_interaction()
+
+    import time
+    return {
+        "id": f"chatcmpl-{int(time.time())}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": "jarvis-cognitive-engine",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": response,
+            },
+            "finish_reason": "stop"
+        }]
+    }
+
 @app.get("/api/status")
 async def get_status():
     return {

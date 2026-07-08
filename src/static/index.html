@@ -47,10 +47,9 @@
                 </div>
             </div>
             <div class="panel rounded-lg p-4 h-1/2 overflow-hidden flex flex-col">
-                <div class="text-xs font-bold mb-2 text-gray-400 uppercase">Knowledge Base</div>
-                <div id="knowledge-list" class="text-xs space-y-1 overflow-y-auto">
-                    <p>• Rust / Kernel</p>
-                    <p>• Python / Engine</p>
+                <div class="text-xs font-bold mb-2 text-gray-400 uppercase">Active Model</div>
+                <div id="model-info" class="text-xs space-y-1 overflow-y-auto text-cyan-500 font-bold">
+                    <p>Loading...</p>
                 </div>
             </div>
         </aside>
@@ -96,9 +95,20 @@
             } catch {}
         }
 
+        async function fetchModels() {
+            try {
+                const res = await fetch('/v1/models');
+                const data = await res.json();
+                document.getElementById('model-info').innerHTML = `<p>• ${data.data[0].id}</p>`;
+            } catch {
+                document.getElementById('model-info').innerHTML = `<p class="text-red-500">• API Offline</p>`;
+            }
+        }
+
         chatInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChat(); });
         setInterval(updateStatus, 5000);
         updateStatus();
+        fetchModels();
     </script>
 </body>
 </html>
