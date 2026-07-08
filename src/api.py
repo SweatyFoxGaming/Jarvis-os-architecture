@@ -1,6 +1,6 @@
 import os
 import sys
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -33,17 +33,18 @@ class ChatRequest(BaseModel):
     message: str
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     # Determine if streaming is requested
     stream = agents['commander'].handle_request(request.message, agents, stream=True)
 
     async def event_generator():
-        full_response = ""
-        for token in stream:
-            full_response += token
-            yield f"data: {token}\n\n"
-        # Reflect after stream
-        agents['improver'].reflect_on_last_interaction()
+        try:
+            for token in stream:
+                yield f"data: {token}\n\n"
+            yield "data: [DONE]\n\n"
+        finally:
+            # Trigger reflection in the background after stream closes
+            background_tasks.add_task(agents['improver'].reflect_on_last_interaction)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

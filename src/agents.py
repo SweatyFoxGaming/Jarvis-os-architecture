@@ -155,7 +155,7 @@ class CommanderAgent(BaseAgent):
             msg = "Hello. How can I assist you with Phoenix OS today?"
             if stream:
                 def _gen():
-                    for t in msg.split(): yield t + " "
+                    yield msg
                 return _gen()
             return msg
 

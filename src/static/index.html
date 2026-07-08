@@ -78,19 +78,33 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
 
+                let buffer = "";
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n\n');
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n\n');
+
+                    // Keep the last partial line in the buffer
+                    buffer = lines.pop();
+
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const token = line.substring(6);
-                            if (token === "[DONE]") break;
+                            if (token === "[DONE]") {
+                                done_received = true;
+                                break;
+                            }
 
-                            // Replace newlines with <br> and handle spaces
-                            const cleanToken = token.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+                            // Handle markdown-like newlines and HTML safety
+                            const cleanToken = token
+                                .replace(/&/g, "&amp;")
+                                .replace(/</g, "&lt;")
+                                .replace(/>/g, "&gt;")
+                                .replace(/\n/g, '<br>')
+                                .replace(/ /g, '&nbsp;');
+
                             jarvisDiv.innerHTML += cleanToken;
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
