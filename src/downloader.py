@@ -1,17 +1,17 @@
 import os
 from huggingface_hub import hf_hub_download
 
-def download_model(repo_id="dphn/dolphin-2_6-phi-2", filename="dolphin-2_6-phi-2.Q4_K_M.gguf"):
+def download_model(repo_id="TheBloke/dolphin-2_6-phi-2-GGUF", filename="dolphin-2_6-phi-2.Q4_K_M.gguf"):
     """
     Downloads a GGUF model from HuggingFace.
     """
     print(f"--- Downloading JARVIS Brain: {repo_id} ---")
-
+    
     # Target directory
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     models_dir = os.path.join(base_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
-
+    
     try:
         path = hf_hub_download(
             repo_id=repo_id,
