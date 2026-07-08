@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette, QFont, QTextCursor
-from PyQt6.QtGui import QColor, QPalette, QFont
 
 class Panel(QFrame):
     def __init__(self, title):
@@ -58,12 +57,15 @@ class JarvisWorker(QThread):
         self.finished.emit(full_response)
 
 class AmbientUI(QMainWindow):
-    def __init__(self, engine, memory, agents):
+    def __init__(self, engine=None, memory=None, agents=None):
         super().__init__()
         self.engine = engine
         self.memory = memory
-        self.agents = agents
-        self.voice = VoiceInterface()
+        self.agents = agents or {}
+        try:
+            self.voice = VoiceInterface()
+        except:
+            self.voice = None
         self.setWindowTitle("JARVIS - Phoenix OS Ambient UI")
         self.resize(1024, 768)
 
@@ -131,6 +133,10 @@ class AmbientUI(QMainWindow):
         self.cursor.movePosition(QTextCursor.MoveOperation.End)
 
         # Non-blocking streaming
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.terminate()
+            self.worker.wait()
+
         self.worker = JarvisWorker(text, self.agents)
         self.worker.token_ready.connect(self.append_token)
         self.worker.finished.connect(self.finalize_response)
@@ -171,6 +177,6 @@ class AmbientUI(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = AmbientUI()
+    window = AmbientUI(None, None, {})
     window.show()
     sys.exit(app.exec())

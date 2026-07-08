@@ -13,14 +13,14 @@ from profiles import HardwareProfile
 from gui import AmbientUI
 from PyQt6.QtWidgets import QApplication
 
+def get_base_path():
+    """ Get absolute path to base directory, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def get_resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+    return os.path.join(get_base_path(), relative_path)
 
 import logging
 
