@@ -113,6 +113,14 @@ If you encounter errors during `pip3 install`:
    pip3 install --no-cache-dir -r requirements.txt
    ```
 
+4. **Error: "Failed to fetch" or "Hash Sum mismatch" (sudo apt update)**:
+   This usually means the Ubuntu mirror you are using is currently syncing or broken. Try cleaning your cache and updating again:
+   ```bash
+   sudo rm -rf /var/lib/apt/lists/*
+   sudo apt update
+   ```
+   If it still fails, you can try changing your download server in Ubuntu's "Software & Updates" settings.
+
 ### CLI Modes:
 - `[0] Commander`: Full JARVIS orchestration (Auto-delegation).
 - `[1] Research`: Manual web research and info gathering.
