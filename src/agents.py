@@ -235,6 +235,14 @@ class CommanderAgent(BaseAgent):
             cmd_part = response.split("SYSTEM:")[1].strip()
             cmd = cmd_part.split("-")[0].strip()
             params = cmd_part.split("-")[1].strip() if "-" in cmd_part else None
+
+            # Integrated Filesystem actions
+            if cmd == "WRITE_FILE":
+                path, content = params.split(",", 1) if "," in params else (params, "")
+                return agents['fs'].write_file(path.strip(), content.strip())
+            elif cmd == "READ_FILE":
+                return agents['fs'].read_file(params.strip())
+
             return self.bridge.system_call(cmd, params)
 
         tags = self._generate_tags(user_input + " " + response)
@@ -278,6 +286,23 @@ class PlanningAgent(BaseAgent):
         """
         plan = self.engine.generate(prompt)
         return plan
+
+class FilesystemAgent(BaseAgent):
+    def read_file(self, path):
+        try:
+            with open(path, 'r') as f:
+                return f.read()
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+    def write_file(self, path, content):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w') as f:
+                f.write(content)
+            return f"Successfully wrote to {path}"
+        except Exception as e:
+            return f"Error writing file: {e}"
 
 class SecurityAgent(BaseAgent):
     def audit_request(self, request, context=""):

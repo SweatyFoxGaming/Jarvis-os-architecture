@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from llm_engine import LLMEngine
 from memory import MemorySystem
-from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent, PlanningAgent, SecurityAgent, MemoryAgent
+from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent, PlanningAgent, SecurityAgent, MemoryAgent, FilesystemAgent
 from trainer import PhoenixTrainer
 from profiles import HardwareProfile
 from downloader import download_model
@@ -74,6 +74,7 @@ def main():
             'security': SecurityAgent(engine, memory),
             'memory': MemoryAgent(engine, memory),
             'improver': SelfImprovementAgent(engine, memory),
+            'fs': FilesystemAgent(engine, memory),
             'commander': CommanderAgent(engine, memory)
         }
 
@@ -110,6 +111,7 @@ def main():
         'security': SecurityAgent(engine, memory),
         'memory': MemoryAgent(engine, memory),
         'improver': SelfImprovementAgent(engine, memory),
+        'fs': FilesystemAgent(engine, memory),
         'commander': CommanderAgent(engine, memory)
     }
 

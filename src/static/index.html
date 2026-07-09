@@ -3,70 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS - Phoenix OS Web UI</title>
+    <title>JARVIS v1.5 - Cyber Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0a0c10; color: white; }
-        .panel { border: 2px solid #1f2937; background-color: #0d1117; }
-        .aura-ring { border: 4px solid cyan; border-radius: 50%; width: 60px; height: 60px; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.7; } }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-color: #05070a;
+            --panel-bg: rgba(13, 17, 23, 0.8);
+            --accent-cyan: #00f2ff;
+            --accent-magenta: #ff00ff;
+            --glow-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #e6edf3;
+            font-family: 'JetBrains Mono', monospace;
+            background-image:
+                radial-gradient(circle at 50% 50%, rgba(0, 242, 255, 0.05) 0%, transparent 50%),
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 100%, 100% 2px, 3px 100%;
+        }
+
+        .cyber-panel {
+            background: var(--panel-bg);
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--glow-shadow);
+        }
+
+        .aura-ring {
+            border: 2px solid var(--accent-cyan);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            box-shadow: 0 0 20px var(--accent-cyan);
+            animation: aura-pulse 3s infinite ease-in-out;
+        }
+
+        @keyframes aura-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; box-shadow: 0 0 15px var(--accent-cyan); }
+            50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 30px var(--accent-magenta); border-color: var(--accent-magenta); }
+        }
+
+        .glitch-text { font-family: 'Orbitron', sans-serif; text-transform: uppercase; letter-spacing: 4px; }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 10px; }
     </style>
 </head>
-<body class="h-screen flex flex-col font-mono">
-    <!-- Header -->
-    <header class="p-4 border-b border-gray-800 flex justify-between items-center">
-        <div class="flex items-center gap-4">
+<body class="h-screen flex flex-col p-4 overflow-hidden">
+    <!-- Top HUD -->
+    <nav class="flex justify-between items-center mb-4 px-2">
+        <div class="flex items-center gap-6">
             <div class="aura-ring"></div>
-            <h1 class="text-xl font-bold tracking-widest text-cyan-400">JARVIS COGNITIVE ENGINE</h1>
-        </div>
-        <div id="sys-status" class="text-xs text-gray-400">
-            CPU: -- | RAM: -- | DISK: --
-        </div>
-    </header>
-
-    <main class="flex-1 flex overflow-hidden p-4 gap-4">
-        <!-- Chat Panel -->
-        <section class="flex-1 panel flex flex-col rounded-lg overflow-hidden">
-            <div class="bg-gray-800 p-2 text-xs font-bold px-4">JARVIS CHAT</div>
-            <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
-                <div class="text-cyan-400">System: JARVIS Web interface initialized.</div>
+            <div>
+                <h1 class="glitch-text text-2xl text-cyan-400 font-bold">JARVIS</h1>
+                <p class="text-[10px] text-gray-500 tracking-[0.3em]">COGNITIVE OPERATING LAYER</p>
             </div>
-            <div class="p-4 border-t border-gray-800 flex gap-2">
-                <input id="chat-input" type="text" class="flex-1 bg-black border border-gray-700 rounded p-2 focus:outline-none focus:border-cyan-400" placeholder="Type a message...">
-                <button onclick="sendChat()" class="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded font-bold">SEND</button>
+        </div>
+        <div class="cyber-panel px-6 py-2 rounded-full flex gap-8 text-[11px] border-cyan-900/50">
+            <div class="flex flex-col"><span class="text-gray-500">CPU</span><span id="cpu-val" class="text-cyan-400">0%</span></div>
+            <div class="flex flex-col"><span class="text-gray-500">RAM</span><span id="ram-val" class="text-magenta-400">0MB</span></div>
+            <div class="flex flex-col"><span class="text-gray-500">SYSTEM</span><span class="text-green-400">STABLE</span></div>
+        </div>
+    </nav>
+
+    <div class="flex-1 flex gap-4 overflow-hidden">
+        <!-- Main Chat Area -->
+        <section class="flex-[3] flex flex-col cyber-panel rounded-xl overflow-hidden relative">
+            <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent"></div>
+
+            <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <div class="flex gap-4 items-start animate-fade-in">
+                    <div class="w-8 h-8 rounded bg-cyan-900 flex items-center justify-center text-[10px] text-cyan-400 border border-cyan-500">SYS</div>
+                    <div class="flex-1 text-sm leading-relaxed text-cyan-100">Neural link established. Awaiting directives.</div>
+                </div>
+            </div>
+
+            <div class="p-6 bg-black/40 border-t border-gray-800">
+                <div class="flex gap-4 bg-gray-900/50 p-2 rounded-lg border border-gray-700 focus-within:border-cyan-500 transition-all">
+                    <input id="chat-input" type="text" class="flex-1 bg-transparent border-none outline-none p-2 text-sm" placeholder="COMMAND JARVIS...">
+                    <button onclick="sendChat()" class="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 px-6 py-2 rounded font-bold text-xs border border-cyan-500/50 uppercase tracking-widest">SEND</button>
+                </div>
             </div>
         </section>
 
-        <!-- Right Side: Status & Knowledge -->
-        <aside class="w-80 flex flex-col gap-4">
-            <div class="panel rounded-lg p-4 h-1/2 overflow-hidden flex flex-col">
-                <div class="text-xs font-bold mb-2 text-gray-400 uppercase">System Health</div>
-                <div id="stats-detail" class="space-y-2 text-sm">
-                    <p>Core: Online</p>
-                    <p>Uptime: Active</p>
+        <!-- Sidebar Diagnostics -->
+        <aside class="flex-1 flex flex-col gap-4 overflow-hidden">
+            <div class="cyber-panel rounded-xl p-4 flex flex-col h-1/2">
+                <h3 class="text-[10px] font-bold text-gray-500 mb-4 tracking-widest">CORE KNOWLEDGE</h3>
+                <div id="knowledge-base" class="space-y-3 overflow-y-auto flex-1 pr-2">
+                    <!-- Dynamic -->
                 </div>
             </div>
-            <div class="panel rounded-lg p-4 h-1/2 overflow-hidden flex flex-col">
-                <div class="text-xs font-bold mb-2 text-gray-400 uppercase">Active Model</div>
-                <div id="model-info" class="text-xs space-y-1 overflow-y-auto text-cyan-500 font-bold">
-                    <p>Loading...</p>
+            <div class="cyber-panel rounded-xl p-4 flex flex-col h-1/2 border-magenta-900/30">
+                <h3 class="text-[10px] font-bold text-gray-500 mb-4 tracking-widest">LOG TRACE</h3>
+                <div id="log-trace" class="text-[10px] space-y-1 text-gray-400 overflow-y-auto flex-1 font-mono">
+                    <div>[08:42] Kernel initializing...</div>
+                    <div>[08:42] Memory modules loaded.</div>
                 </div>
             </div>
         </aside>
-    </main>
+    </div>
 
     <script>
-        const chatBox = document.getElementById('chat-box');
-        const chatInput = document.getElementById('chat-input');
-        const sysStatus = document.getElementById('sys-status');
+        const container = document.getElementById('chat-container');
+        const input = document.getElementById('chat-input');
+        const logTrace = document.getElementById('log-trace');
+
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit' });
+            const div = document.createElement('div');
+            div.innerHTML = `<span class="text-cyan-700">[${time}]</span> ${msg}`;
+            logTrace.appendChild(div);
+            logTrace.scrollTop = logTrace.scrollHeight;
+        }
+
+        function createMessageElement(sender) {
+            const isUser = sender === 'YOU';
+            const div = document.createElement('div');
+            div.className = `flex gap-4 items-start ${isUser ? 'flex-row-reverse' : ''}`;
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded ${isUser ? 'bg-gray-800 border-gray-600' : 'bg-cyan-900 border-cyan-500'} flex items-center justify-center text-[10px] text-gray-300 border">${sender.substring(0,3)}</div>
+                <div class="flex-1 text-sm leading-relaxed ${isUser ? 'text-right' : 'text-cyan-100'} p-1 content-box"></div>
+            `;
+            container.appendChild(div);
+            return div.querySelector('.content-box');
+        }
 
         async function sendChat() {
-            const msg = chatInput.value.trim();
+            const msg = input.value.trim();
             if (!msg) return;
-            chatInput.value = '';
+            input.value = '';
 
-            appendMessage('You', msg);
-            const jarvisDiv = appendMessage('JARVIS', '');
+            const userContent = createMessageElement('YOU');
+            userContent.innerText = msg;
+            addLog(`Delegating: ${msg.substring(0, 20)}...`);
+
+            const jarvisContent = createMessageElement('JARVIS');
 
             try {
                 const response = await fetch('/api/chat', {
@@ -77,74 +155,44 @@
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-
                 let buffer = "";
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
                     buffer += decoder.decode(value, {stream: true});
                     const lines = buffer.split('\n\n');
-
-                    // Keep the last partial line in the buffer
                     buffer = lines.pop();
 
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             const token = line.substring(6);
-                            if (token === "[DONE]") {
-                                done_received = true;
-                                break;
-                            }
-
-                            // Handle markdown-like newlines and HTML safety
-                            const cleanToken = token
-                                .replace(/&/g, "&amp;")
-                                .replace(/</g, "&lt;")
-                                .replace(/>/g, "&gt;")
-                                .replace(/\n/g, '<br>')
-                                .replace(/ /g, '&nbsp;');
-
-                            jarvisDiv.innerHTML += cleanToken;
-                            chatBox.scrollTop = chatBox.scrollHeight;
+                            if (token === "[DONE]") break;
+                            jarvisContent.innerHTML += token.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+                            container.scrollTop = container.scrollHeight;
                         }
                     }
                 }
+                addLog("Response finalized.");
             } catch (err) {
-                appendMessage('System', 'Error communicating with JARVIS.');
+                jarvisContent.innerText = "CRITICAL ERROR: Communication lost.";
+                addLog("Link error detected.");
             }
         }
 
-        function appendMessage(sender, text) {
-            const div = document.createElement('div');
-            div.innerHTML = `<b class="${sender === 'You' ? 'text-white' : 'text-cyan-400'}">${sender}:</b> ${text}`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-            return div;
-        }
-
-        async function updateStatus() {
+        async function updateHUD() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-                sysStatus.innerText = `CPU: ${data.cpu}% | RAM: ${data.ram_available}MB | DISK: ${data.disk}%`;
+                document.getElementById('cpu-val').innerText = `${data.cpu}%`;
+                document.getElementById('ram-val').innerText = `${data.ram_available}MB`;
             } catch {}
         }
 
-        async function fetchModels() {
-            try {
-                const res = await fetch('/v1/models');
-                const data = await res.json();
-                document.getElementById('model-info').innerHTML = `<p>• ${data.data[0].id}</p>`;
-            } catch {
-                document.getElementById('model-info').innerHTML = `<p class="text-red-500">• API Offline</p>`;
-            }
-        }
-
-        chatInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChat(); });
-        setInterval(updateStatus, 5000);
-        updateStatus();
-        fetchModels();
+        input.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChat(); });
+        setInterval(updateHUD, 3000);
+        updateHUD();
     </script>
 </body>
 </html>

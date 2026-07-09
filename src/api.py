@@ -3,7 +3,9 @@ import sys
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import anyio
 import psutil
 
 # Add src to path
@@ -15,6 +17,14 @@ from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAg
 from profiles import HardwareProfile
 
 app = FastAPI(title="JARVIS Cognitive API")
+
+# Allow browser cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Global instances (Lazy load or init on start)
 memory = MemorySystem()
@@ -34,16 +44,20 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
-    # Determine if streaming is requested
-    stream = agents['commander'].handle_request(request.message, agents, stream=True)
-
     async def event_generator():
         try:
+            # Run the blocking generator in a thread to keep the event loop responsive
+            def get_stream():
+                return agents['commander'].handle_request(request.message, agents, stream=True)
+
+            stream = await anyio.to_thread.run_sync(get_stream)
+
             for token in stream:
                 yield f"data: {token}\n\n"
             yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: Error: {str(e)}\n\n"
         finally:
-            # Trigger reflection in the background after stream closes
             background_tasks.add_task(agents['improver'].reflect_on_last_interaction)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
