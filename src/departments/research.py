@@ -3,16 +3,21 @@ from src.core.models import Task, TaskStatus
 
 class ResearchWorker(BaseWorker):
     def execute(self, task: Task) -> Task:
-        # V3 compatibility: look for 'objective' from Executive Mind
-        query = task.input_data.get("objective") or task.input_data.get("request", "")
-        print(f"[ResearchWorker] Performing deep research on: {query}")
-
+        query = task.input_data.get("request", task.input_data.get("objective", ""))
+        print(f"[ResearchWorker] Processing query: {query[:80]}...")
+        
         if not self.engine:
-            task.output_data = {"report": f"Research simulation for: {query}"}
+            response = "I am operating in simulation mode. The full cognitive system is active."
         else:
-            prompt = f"System: Research specialist. Report on: {query}"
-            task.output_data = {"report": self.engine.generate(prompt)}
+            prompt = f"""You are JARVIS, a calm, professional, and highly capable AI assistant.
+You are the Executive Mind of the Phoenix Intelligence Platform.
 
+User Query: {query}
+
+Respond naturally and helpfully:"""
+            response = self.engine.generate(prompt)
+        
+        task.output_data = {"report": response}
         task.status = TaskStatus.COMPLETED
         task.progress = 1.0
         return task
@@ -24,5 +29,4 @@ class ResearchDepartment(BaseDepartment):
 
     def initialize(self, event_bus):
         super().initialize(event_bus)
-        # Add workers
         self.manager.register_worker(ResearchWorker("research-worker-01", self.engine))
