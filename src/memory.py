@@ -15,7 +15,7 @@ class MemorySystem:
         dir_name = os.path.dirname(db_path)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
-        self.conn = sqlite3.connect(db_path)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.create_tables()
 
     def create_tables(self):
@@ -138,6 +138,38 @@ class MemorySystem:
             (limit,)
         )
         return [row[0] for row in cursor.fetchall()]
+
+    def retrieve_context(self, query, limit=5):
+        """
+        Omniscient Retrieval: Aggregates semantic facts, relevant episodes, and skills.
+        """
+        context = []
+
+        # 1. Semantic Facts (Keyword search as fallback for embedding search)
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT value FROM semantic_memory WHERE value LIKE ? OR key LIKE ? ORDER BY id DESC LIMIT ?",
+            (f'%{query}%', f'%{query}%', limit)
+        )
+        facts = [row[0] for row in cursor.fetchall()]
+        if facts:
+            context.append("--- RELEVANT KNOWLEDGE ---")
+            context.extend(facts)
+
+        # 2. Episodic Memory (Recent interactions)
+        episodes = self.search_episodes(query, limit=3)
+        if episodes:
+            context.append("--- PREVIOUS INTERACTIONS ---")
+            for ep in episodes:
+                context.append(f"User: {ep[0]}\nJarvis: {ep[1]}")
+
+        # 3. Recent Lessons
+        lessons = self.get_recent_lessons(limit=3)
+        if lessons:
+            context.append("--- RECENT LESSONS ---")
+            context.extend(lessons)
+
+        return "\n".join(context)
 
 if __name__ == "__main__":
     mem = MemorySystem()

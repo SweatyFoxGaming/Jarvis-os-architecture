@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS v1.5 - Cyber Intelligence</title>
+    <title>JARVIS - Supreme Sovereign</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
 
         :root {
-            --bg-color: #05070a;
-            --panel-bg: rgba(13, 17, 23, 0.8);
+            --bg-color: #020408;
+            --panel-bg: rgba(10, 14, 20, 0.9);
             --accent-cyan: #00f2ff;
             --accent-magenta: #ff00ff;
-            --glow-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+            --accent-gold: #ffcc00;
+            --glow-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
         }
 
         body {
@@ -40,12 +41,13 @@
             width: 50px;
             height: 50px;
             box-shadow: 0 0 20px var(--accent-cyan);
-            animation: aura-pulse 3s infinite ease-in-out;
+            animation: aura-pulse 4s infinite ease-in-out;
         }
 
         @keyframes aura-pulse {
-            0%, 100% { transform: scale(1); opacity: 0.8; box-shadow: 0 0 15px var(--accent-cyan); }
-            50% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 30px var(--accent-magenta); border-color: var(--accent-magenta); }
+            0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; box-shadow: 0 0 15px var(--accent-cyan); border-color: var(--accent-cyan); }
+            33% { transform: scale(1.1) rotate(120deg); opacity: 1; box-shadow: 0 0 30px var(--accent-magenta); border-color: var(--accent-magenta); }
+            66% { transform: scale(1.05) rotate(240deg); opacity: 0.9; box-shadow: 0 0 25px var(--accent-gold); border-color: var(--accent-gold); }
         }
 
         .glitch-text { font-family: 'Orbitron', sans-serif; text-transform: uppercase; letter-spacing: 4px; }
@@ -62,7 +64,7 @@
             <div class="aura-ring"></div>
             <div>
                 <h1 class="glitch-text text-2xl text-cyan-400 font-bold">JARVIS</h1>
-                <p class="text-[10px] text-gray-500 tracking-[0.3em]">COGNITIVE OPERATING LAYER</p>
+                <p class="text-[10px] text-gray-500 tracking-[0.3em]">SUPREME SOVEREIGN OVERSEER</p>
             </div>
         </div>
         <div class="cyber-panel px-6 py-2 rounded-full flex gap-8 text-[11px] border-cyan-900/50">

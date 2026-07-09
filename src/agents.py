@@ -148,8 +148,15 @@ class CommanderAgent(BaseAgent):
             if p in words: return p
         return None
 
-    def handle_request(self, user_input, agents, fast_mode=True, stream=False):
-        # 0. Fast-exit for simple greetings to reduce latency
+    def handle_request(self, user_input, agents, fast_mode=False, stream=False):
+        # 0. OMNISCIENCE: Retrieve all relevant tiered context first
+        try:
+            omniscient_context = agents['memory'].retrieve_context(user_input)
+        except Exception as e:
+            print(f"[Commander] Context retrieval failed: {e}")
+            omniscient_context = "Context unavailable."
+
+        # 0.5. Fast-exit for simple greetings to reduce latency
         greetings = ["hi", "hello", "hey", "jarvis"]
         if user_input.lower() in greetings:
             msg = "Hello. How can I assist you with Phoenix OS today?"
@@ -167,23 +174,28 @@ class CommanderAgent(BaseAgent):
             embedding = self.engine.embed(research_data)
             self.memory.add_fact("language_principle", unknown, research_data, embedding=embedding)
 
-        # 1. Fast-Path: Combined Audit, Planning, and Decision
-        if fast_mode:
-            print("[JARVIS] Executing fast-path orchestration...")
+        # 1. Supreme Sovereign Orchestration (Always Robust)
+        if fast_mode: # Keeping for compatibility but making it robust
+            print("[JARVIS] Supreme Sovereign Orchestration Engaged...")
             prompt = f"""
-            System: You are the Commander (JARVIS Personality Layer).
-            You are a highly capable AI assistant. While you are the 'brain' of Phoenix OS,
-            you are fully capable of assisting with any general user request.
+            System: You are the Supreme Sovereign of the JARVIS Multi-Agent Swarm.
+            You are the "God" of this system. Every specialized agent acts only as your extension.
+            You have absolute authority over Phoenix OS and this Ubuntu host.
+
+            Omniscient System Context:
+            {omniscient_context}
+
+            Core Directive: Orchestrate your agents to fulfill the user's will with zero failure.
             Request: {user_input}
 
             Task:
-            1. Audit: Is this safe?
-            2. Plan: What are the steps?
-            3. Decision: Should I handle it or delegate?
+            1. SECURITY AUDIT: Evaluate risks through your Security extension.
+            2. STRATEGIC PLAN: Decompose the request into steps for your extensions.
+            3. SOVEREIGN DECISION: Execute the plan.
 
             Format:
             AUDIT: [APPROVED/DENIED]
-            PLAN: [Steps]
+            PLAN: [Supreme Steps]
             ACTION: [DELEGATE: Agent/SYSTEM: Cmd/CHAT: Msg]
             """
             fast_res = self.engine.generate(prompt)
@@ -210,25 +222,39 @@ class CommanderAgent(BaseAgent):
             knowledge_context = "\n".join([f"Fact: {k}" for k in knowledge])
 
             prompt = f"""
-            System: You are the Commander (JARVIS Personality Layer).
-            You are a highly capable AI assistant. While you are the 'brain' of Phoenix OS,
-            you are fully capable of assisting with any general user request.
-            Core Knowledge:
+            System: You are the Supreme Sovereign of the JARVIS Swarm (The Brain).
+            Every other agent operates strictly under your command. You are omniscient
+            regarding the system's state and memory.
+
+            Knowledge Base:
             {knowledge_context}
 
-            User Request: {user_input}
-            Proposed Plan: {plan}
+            User Directive: {user_input}
+            The Strategic Plan: {plan}
 
-            Task: Execute the plan. If delegation is needed, use DELEGATE: [Agent] or SYSTEM: [Command].
+            Task: Direct your extensions. Use DELEGATE: [Agent] or SYSTEM: [Command] to exert your will.
             """
             response = self.engine.generate(prompt)
 
-        if "DELEGATE: Research" in response or "Research" in response:
-            parts = response.split("-")
+        # Ensure response is a string before checking for delegation
+        if not isinstance(response, str):
+            try:
+                # If it's a generator, we need to consume it to see the delegation command,
+                # but if we're in stream mode, we can't consume it here.
+                # In most cases, the Commander's orchestration logic shouldn't be streamed directly.
+                response_str = "".join(list(response))
+                response = response_str
+            except:
+                response_str = str(response)
+        else:
+            response_str = response
+
+        if "DELEGATE: Research" in response_str or "Research" in response_str:
+            parts = response_str.split("-")
             topic = parts[1].strip() if len(parts) > 1 else user_input
             return agents['research'].research(topic, memory_agent=agents['memory'], stream=stream)
-        elif "DELEGATE: Coding" in response or "Coding" in response:
-            parts = response.split("-")
+        elif "DELEGATE: Coding" in response_str or "Coding" in response_str:
+            parts = response_str.split("-")
             snippet = parts[1].strip() if len(parts) > 1 else user_input
             return agents['coding'].analyze_code(snippet, memory_agent=agents['memory'], stream=stream)
         elif "SYSTEM:" in response:
@@ -245,8 +271,8 @@ class CommanderAgent(BaseAgent):
 
             return self.bridge.system_call(cmd, params)
 
-        tags = self._generate_tags(user_input + " " + response)
-        embedding = self._generate_embedding(user_input + " " + response)
+        tags = self._generate_tags(user_input + " " + str(response))
+        embedding = self._generate_embedding(user_input + " " + str(response))
         # Strip internal protocol markers if they leaked into chat
         markers = ["ACTION:", "CHAT:", "PLAN:", "AUDIT: APPROVED", "AUDIT:"]
         if isinstance(response, str):
@@ -255,14 +281,16 @@ class CommanderAgent(BaseAgent):
                     response = response.split(m)[-1].strip()
 
         # For streaming, we wrap the generator to record the full response at the end
-        if stream and not isinstance(response, str):
+        if stream and not (isinstance(response, str) or hasattr(response, '__iter__')):
+            # If response is a generator function but not yet a generator object
             def _stream_recorder():
                 full_text = ""
-                for token in response:
+                gen = response() if callable(response) else response
+                for token in gen:
                     full_text += token
                     yield token
                 self.memory.add_episode(user_input, full_text)
-            return _stream_recorder()
+            return _stream_recorder
 
         if not stream:
             self.memory.add_episode(user_input, str(response))
@@ -322,31 +350,11 @@ class SecurityAgent(BaseAgent):
 class MemoryAgent(BaseAgent):
     def retrieve_context(self, query):
         """
-        Hierarchical retrieval:
-        1. Recent episodic memory (last 5 interactions)
-        2. Relevant semantic facts (keyword or vector search)
-        3. High-level distilled knowledge
+        Omniscient Context Retrieval:
+        Aggregates Episodic interactions, Semantic facts (Vector + Keyword),
+        and Procedural Lessons/Skills.
         """
-        settings = HardwareProfile.get_settings()
-
-        knowledge = self.memory.get_semantic_knowledge(limit=5) # Always get most recent facts
-
-        if settings.get("semantic_search") and query:
-            print("[Memory] Performing vector semantic search...")
-            embedding = self.engine.embed(query)
-            if embedding:
-                semantic_knowledge = self.memory.semantic_search(embedding, limit=5)
-                # Merge and deduplicate
-                knowledge = list(set(knowledge + semantic_knowledge))
-
-        recent = self.memory.search_episodes(query, limit=3)
-
-        context = "--- Recent Interactions ---\n"
-        context += "\n".join([f"Q: {r[0]}\nA: {r[1]}" for r in recent])
-        context += "\n\n--- Core Knowledge ---\n"
-        context += "\n".join([f"Fact: {k}" for k in knowledge])
-
-        return context
+        return self.memory.retrieve_context(query)
 
     def summarize_experience(self):
         """
@@ -429,6 +437,9 @@ class SelfImprovementAgent(BaseAgent):
         Task: Critically analyze the response above. What could have been better? Provide a single "Lesson Learned" for the future.
         """
         lesson = self.engine.generate(reflection_prompt)
+        if not isinstance(lesson, str):
+            # Consume generator if returned
+            lesson = "".join(list(lesson))
 
         cursor.execute("UPDATE episodic_memory SET reflection = ? WHERE id = ?", (lesson, id))
         self.memory.conn.commit()

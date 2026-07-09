@@ -41,7 +41,7 @@ def main():
 
     load_dotenv()
 
-    print("--- Phoenix LLM (JARVIS Core) ---")
+    print("--- JARVIS: Supreme Sovereign of Phoenix OS ---")
 
     # Default to GUI if run without terminal (like .desktop file)
     is_terminal = sys.stdin.isatty()
@@ -82,7 +82,7 @@ def main():
         window.engine = engine
         window.memory = memory
         window.agents = agents
-        window.add_chat("JARVIS", "Core systems online. Welcome.")
+        window.add_chat("JARVIS", "Sovereign oversight active. Systems are under my command.")
 
         sys.exit(app.exec())
 
@@ -148,10 +148,10 @@ def main():
             agents['improver'].reflect_on_last_interaction()
         elif choice == '1':
             topic = input("Research Topic/Question: ")
-            print("\nJARVIS Researching...")
-            res = agents['research'].research(topic)
+            print("\nJARVIS Orchestrating Research...")
+            # Route through Commander to ensure oversight
+            res = agents['commander'].handle_request(f"Research the following: {topic}", agents)
             print(f"\nResult: {res}")
-            # Auto-reflect
             agents['improver'].reflect_on_last_interaction()
         elif choice == '2':
             print("Enter code (end with a blank line):")
@@ -162,10 +162,10 @@ def main():
                     break
                 lines.append(line)
             code = "\n".join(lines)
-            print("\nJARVIS Analyzing Code...")
-            res = agents['coding'].analyze_code(code)
+            print("\nJARVIS Orchestrating Code Analysis...")
+            # Route through Commander to ensure oversight
+            res = agents['commander'].handle_request(f"Analyze this code: {code}", agents)
             print(f"\nAnalysis: {res}")
-            # Auto-reflect
             agents['improver'].reflect_on_last_interaction()
         elif choice == '3':
             print("\nJARVIS Reflecting on past work...")
@@ -178,13 +178,10 @@ def main():
             print("Sleep-learning complete. Semantic knowledge base updated.")
         elif choice == '5':
             lang = input("Which language/framework should JARVIS learn? ").strip()
-            print(f"\nJARVIS Researching and learning {lang}...")
-            # 1. Research the language
-            knowledge = agents['research'].research(f"Core principles and best practices of {lang} programming language")
-            # 2. Add to semantic memory
-            embedding = engine.embed(knowledge)
-            memory.add_fact("language_principle", lang, knowledge, embedding=embedding)
-            print(f"\nJARVIS has integrated {lang} into its core knowledge base.")
+            print(f"\nJARVIS Executing Autonomous Onboarding for {lang}...")
+            # Route through Commander which handles unknown language detection/onboarding
+            res = agents['commander'].handle_request(f"Learn everything about {lang}", agents)
+            print(f"\nJARVIS Status: {res}")
         else:
             print("Invalid choice.")
 

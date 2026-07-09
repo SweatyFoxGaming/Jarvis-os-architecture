@@ -50,7 +50,13 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             def get_stream():
                 return agents['commander'].handle_request(request.message, agents, stream=True)
 
-            stream = await anyio.to_thread.run_sync(get_stream)
+            stream_obj = await anyio.to_thread.run_sync(get_stream)
+
+            # If it's a callable (wrapped generator), call it
+            if callable(stream_obj):
+                stream = stream_obj()
+            else:
+                stream = stream_obj
 
             for token in stream:
                 yield f"data: {token}\n\n"
