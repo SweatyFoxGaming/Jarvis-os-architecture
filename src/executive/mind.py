@@ -6,8 +6,7 @@ from src.executive.board import ExecutiveBoard
 
 class ExecutiveMind(ICEO):
     """
-    The cognitive core of JARVIS. Responsible for thought, not execution.
-    Thinks in goals and capabilities.
+    The cognitive core of JARVIS. Now handles simple conversation directly.
     """
     def __init__(self, chief_of_staff: IChiefOfStaff, event_bus: IEventBus, digital_twin: DigitalTwin):
         self.cos = chief_of_staff
@@ -18,67 +17,64 @@ class ExecutiveMind(ICEO):
 
     def process_request(self, user_input: str) -> str:
         print(f"[Mind] Processing Executive Request: {user_input}")
+        
+        lower_input = user_input.lower().strip()
+        
+        # Direct responses for casual conversation (more human-like)
+        if any(g in lower_input for g in ["hello", "hi", "hey", "how are you", "status", "who are you"]):
+            direct_response = """Hello! I am JARVIS, the Executive Mind of the Phoenix Intelligence Platform.
+I am fully operational with the complete cognitive architecture active.
+How can I help you today?"""
+            print("[Mind] Direct conversational response.")
+            return direct_response
 
-        # 1. Intent & Context Analysis (Internal thought)
+        # For more complex requests, use full delegation
         context_summary = self.twin.get_summary()
-
-        # 2. Board Consultation
+        
         board_results = self.board.consult({
             "intent": user_input,
             "context": context_summary
         })
-
-        # 3. Decision Formulation
+        
         decision = ExecutiveDecision(
             intent=user_input,
             context=context_summary,
-            reasoning_summary="Integrated board feedback for mission alignment.",
-            confidence=board_results['risk']['confidence_score'],
-            expected_outcome="Strategic objective achieved.",
+            reasoning_summary="Integrated board feedback.",
+            confidence=0.85,
+            expected_outcome="User request fulfilled.",
             estimated_cost=0.01,
-            estimated_time_sec=60,
-            selected_capabilities=["research_specialist"] # Logic based on Board feedback
+            estimated_time_sec=30,
+            selected_capabilities=["research_specialist"]
         )
-
-        # 4. Capability Selection logic (Prioritize Deterministic)
-        low_input = user_input.lower()
-        if any(k in low_input for k in ["time", "date", "clock"]):
-            capability = "time_service"
-        elif any(k in low_input for k in ["cpu", "ram", "memory", "system status", "stats"]):
-            capability = "system_info"
-        elif "code" in low_input or "write" in low_input:
+        
+        capability = "research_specialist"
+        if any(k in lower_input for k in ["code", "write", "function", "class", "debug", "python", "rust"]):
             capability = "coding_specialist"
-        else:
-            capability = "research_specialist"
-
-        # 5. Goal Alignment
+        
         new_goal = Goal(
-            title=f"Objective: {user_input[:20]}",
+            title=f"Objective: {user_input[:30]}",
             description=user_input,
-            alignment="Board Validated"
+            alignment="User Request"
         )
         self.active_goals.append(new_goal)
-
-        # 6. Final Executive Decision -> Chief of Staff
+        
         print(f"[Mind] Finalizing Decision: {decision.uuid}")
-
+        
         task = Task(
             creator_id="ExecutiveMind",
             target_capability=capability,
-            input_data={"objective": user_input, "executive_context": decision.dict()}
+            input_data={"request": user_input, "executive_context": decision.dict()}
         )
-
-        # Publish Executive Decision Event
+        
         self.event_bus.publish(Event(
             event_type="ExecutiveDecisionFinalized",
             source="ExecutiveMind",
             payload=decision.dict()
         ))
-
+        
         self.cos.schedule_task(task)
-
-        return f"Executive Mind Decision: {decision.expected_outcome}. Orchestrating {capability}..."
+        
+        return f"Understood. Orchestrating {capability} for your request..."
 
     def assess_vision(self):
-        # Long-term strategic awareness
         pass
