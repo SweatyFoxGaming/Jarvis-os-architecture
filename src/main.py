@@ -1,7 +1,5 @@
 import sys
 import os
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from dotenv import load_dotenv
 
 # Ensure the project root is in the path
@@ -73,6 +71,7 @@ def main():
         uvicorn.run("src.api:app", host="0.0.0.0", port=8000, reload=False)
         sys.exit(0)
 
+    # Improved Terminal CLI Loop
     while True:
         print("\nJARVIS V3 Executive Terminal")
         try:
@@ -82,14 +81,29 @@ def main():
         if user_input.lower() == 'q':
             break
         
-        print("\nExecutive Mind Reasoning...")
+        print("\n[Executive Mind] Processing request...")
         res = engine_v3.run(user_input)
         results = engine_v3.dispatch_tasks()
         
-        print(f"\n[Mind] Decision: {res}")
+        print(f"\n[Mind] Decision Summary: {res}")
+        
         if results:
+            print("\n=== SPECIALIST OUTPUT ===")
             for task_id, output in results.items():
-                print(f"\n[Specialist Output]:\n{output}")
+                print(f"\n[Task {task_id} Output]:")
+                if isinstance(output, dict):
+                    if "report" in output:
+                        print(output["report"])
+                    elif "code" in output:
+                        print(output.get("code", output))
+                    else:
+                        print(output)
+                else:
+                    print(str(output))
+        else:
+            print("\nNo specialist output available yet.")
+        
+        print("\n" + "="*70)
 
 if __name__ == "__main__":
     main()
