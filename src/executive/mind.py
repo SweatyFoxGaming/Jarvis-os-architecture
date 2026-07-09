@@ -40,10 +40,16 @@ class ExecutiveMind(ICEO):
             selected_capabilities=["research_specialist"] # Logic based on Board feedback
         )
 
-        # 4. Capability Selection logic (Simplified for V3 MVP)
-        capability = "research_specialist"
-        if "code" in user_input.lower():
+        # 4. Capability Selection logic (Prioritize Deterministic)
+        low_input = user_input.lower()
+        if any(k in low_input for k in ["time", "date", "clock"]):
+            capability = "time_service"
+        elif any(k in low_input for k in ["cpu", "ram", "memory", "system status", "stats"]):
+            capability = "system_info"
+        elif "code" in low_input or "write" in low_input:
             capability = "coding_specialist"
+        else:
+            capability = "research_specialist"
 
         # 5. Goal Alignment
         new_goal = Goal(

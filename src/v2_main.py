@@ -14,6 +14,7 @@ from src.executive.chief_of_staff import ChiefOfStaff
 from src.executive.mind import ExecutiveMind
 from src.departments.research import ResearchDepartment
 from src.departments.coding import CodingDepartment
+from src.departments.system import SystemDepartment
 from src.core.digital_twin import DigitalTwin
 from src.core.bootstrapping import register_initial_capabilities
 
@@ -41,6 +42,7 @@ class CognitiveEngineV3:
         # 3. Departments
         self.research_dept = ResearchDepartment(self.engine)
         self.coding_dept = CodingDepartment(self.engine)
+        self.system_dept = SystemDepartment()
 
         # 4. Initialization
         self._setup()
@@ -49,10 +51,12 @@ class CognitiveEngineV3:
         # Initialize departments
         self.research_dept.initialize(self.event_bus)
         self.coding_dept.initialize(self.event_bus)
+        self.system_dept.initialize(self.event_bus)
 
         # Register departments
         self.dept_registry.register(self.research_dept)
         self.dept_registry.register(self.coding_dept)
+        self.dept_registry.register(self.system_dept)
 
         # Register capabilities (Constitution-aligned bootstrapping)
         register_initial_capabilities(self.cap_registry)

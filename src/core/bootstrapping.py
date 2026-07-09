@@ -23,3 +23,18 @@ def register_initial_capabilities(cap_registry: CapabilityRegistry):
         estimated_time_sec=45
     )
     cap_registry.register(coding_cap, "Coding")
+
+    # System Capabilities (Deterministic)
+    time_cap = Capability(
+        name="time_service",
+        purpose="Retrieve the current system time and date.",
+        estimated_time_sec=1
+    )
+    cap_registry.register(time_cap, "System")
+
+    sysinfo_cap = Capability(
+        name="system_info",
+        purpose="Retrieve hardware statistics and OS status.",
+        estimated_time_sec=1
+    )
+    cap_registry.register(sysinfo_cap, "System")

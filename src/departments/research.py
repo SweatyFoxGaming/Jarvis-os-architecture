@@ -3,7 +3,8 @@ from src.core.models import Task, TaskStatus
 
 class ResearchWorker(BaseWorker):
     def execute(self, task: Task) -> Task:
-        query = task.input_data.get("request", "")
+        # V3 compatibility: look for 'objective' from Executive Mind
+        query = task.input_data.get("objective") or task.input_data.get("request", "")
         print(f"[ResearchWorker] Performing deep research on: {query}")
 
         if not self.engine:

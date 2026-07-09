@@ -23,21 +23,24 @@ class LLMEngine:
         print(f"Loading model from {self.model_path}...")
 
         try:
-            from profiles import HardwareProfile
+            from src.core.profiles import HardwareProfile
             settings = HardwareProfile.get_settings()
         except ImportError:
-            settings = {"n_ctx": 2048, "n_batch": 512}
+            settings = {"threads": 2, "context_window": 1024, "batch_size": 256}
 
         lora_path = os.getenv("LORA_PATH", "models/refined_model")
+
+        # Optimization: Use half of available cores to avoid system freeze
+        default_threads = max(1, os.cpu_count() // 2)
 
         self.llm = Llama(
             model_path=self.model_path,
             lora_path=lora_path if os.path.exists(lora_path) else None,
-            n_ctx=int(os.getenv("N_CTX", str(settings["n_ctx"]))),
-            n_batch=int(os.getenv("N_BATCH", str(settings["n_batch"]))),
-            n_threads=int(os.getenv("N_THREADS", str(os.cpu_count()))),
+            n_ctx=int(os.getenv("N_CTX", str(settings.get("context_window", 1024)))),
+            n_batch=int(os.getenv("N_BATCH", str(settings.get("batch_size", 512)))),
+            n_threads=int(os.getenv("N_THREADS", str(settings.get("threads", default_threads)))),
             n_gpu_layers=0,
-            embedding=True, # Enable embeddings for semantic search
+            embedding=True,
             verbose=False
         )
         print("Model loaded successfully" + (f" with adapter from {lora_path}" if os.path.exists(lora_path) else ""))

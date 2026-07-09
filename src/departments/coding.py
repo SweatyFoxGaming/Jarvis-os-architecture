@@ -3,7 +3,8 @@ from src.core.models import Task, TaskStatus
 
 class CodingWorker(BaseWorker):
     def execute(self, task: Task) -> Task:
-        request = task.input_data.get("request", "")
+        # V3 compatibility: look for 'objective' from Executive Mind
+        request = task.input_data.get("objective") or task.input_data.get("request", "")
         print(f"[CodingWorker] Generating code for: {request}")
 
         if not self.engine:

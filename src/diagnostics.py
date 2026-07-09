@@ -14,6 +14,7 @@ from src.executive.chief_of_staff import ChiefOfStaff
 from src.executive.mind import ExecutiveMind
 from src.departments.research import ResearchDepartment
 from src.departments.coding import CodingDepartment
+from src.departments.system import SystemDepartment
 from src.core.digital_twin import DigitalTwin
 from src.core.bootstrapping import register_initial_capabilities
 
@@ -35,16 +36,19 @@ def run_v3_executive_audit():
     # 3. Organization Bootstrapping
     research = ResearchDepartment()
     coding = CodingDepartment()
+    system = SystemDepartment()
     research.initialize(event_bus)
     coding.initialize(event_bus)
+    system.initialize(event_bus)
     dept_registry.register(research)
     dept_registry.register(coding)
+    dept_registry.register(system)
 
     register_initial_capabilities(cap_registry)
 
     # 4. Executive Reasoning Pipeline Test
     print("\n[Mind] Testing Strategic Reasoning Pipeline...")
-    request = "Analyze the risks of autonomous kernel updates in Phoenix OS"
+    request = "What is the time?"
     print(f"Executive Request: {request}")
 
     decision_summary = mind.process_request(request)
