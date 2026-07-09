@@ -1,4 +1,6 @@
 import collections
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from typing import Any, Callable, Dict, List
 from src.core.interfaces import IEventBus
 from src.core.models import Event
