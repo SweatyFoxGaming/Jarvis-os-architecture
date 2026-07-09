@@ -33,6 +33,7 @@ class CognitiveEngineV3:
         settings = HardwareManager.get_optimized_settings(hardware_info)
         self.model_manager = ModelManager(settings)
         self.engine = LLMEngine() # Initialize core engine
+        print(f"✅ LLM Engine initialized. Model ready: {self.engine.llm is not None}")
 
         # 2. Executive Hierarchy
         self.cos = ChiefOfStaff(self.event_bus, self.cap_registry, self.dept_registry)
