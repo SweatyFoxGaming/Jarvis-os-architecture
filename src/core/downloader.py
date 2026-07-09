@@ -1,5 +1,7 @@
 import os
 import requests
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from tqdm import tqdm
 
 def download_model(model_url="https://huggingface.co/TheBloke/dolphin-2.6-phi-2-GGUF/resolve/main/dolphin-2_6-phi-2.Q4_K_M.gguf", 
