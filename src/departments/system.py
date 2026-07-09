@@ -1,5 +1,7 @@
 import datetime
 import psutil
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from src.departments.base import BaseDepartment, BaseWorker
 from src.core.models import Task, TaskStatus
 
