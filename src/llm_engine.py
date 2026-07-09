@@ -1,7 +1,5 @@
 import os
 import sys
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 try:
     from llama_cpp import Llama
@@ -42,25 +40,30 @@ class LLMEngine:
             
         print(f"Loading model from {self.model_path}...")
         
+        # Safe settings loading
         try:
             from src.core.profiles import HardwareProfile
             settings = HardwareProfile.get_settings()
-        except ImportError:
-            settings = {"n_ctx": 2048, "n_batch": 512}
-            
+        except Exception:
+            settings = {"context_window": 2048, "n_ctx": 2048, "n_batch": 512}
+        
+        # Fallback for different key names
+        n_ctx = settings.get("n_ctx") or settings.get("context_window") or 2048
+        n_batch = settings.get("n_batch") or 512
+        
         lora_path = os.getenv("LORA_PATH", "models/refined_model")
         
         self.llm = Llama(
             model_path=self.model_path,
             lora_path=lora_path if os.path.exists(lora_path) else None,
-            n_ctx=int(os.getenv("N_CTX", str(settings["n_ctx"]))),
-            n_batch=int(os.getenv("N_BATCH", str(settings["n_batch"]))),
-            n_threads=int(os.getenv("N_THREADS", str(os.cpu_count()))),
+            n_ctx=int(os.getenv("N_CTX", str(n_ctx))),
+            n_batch=int(os.getenv("N_BATCH", str(n_batch))),
+            n_threads=int(os.getenv("N_THREADS", str(os.cpu_count() or 2))),
             n_gpu_layers=0,
             embedding=True,
             verbose=False
         )
-        print("Model loaded successfully")
+        print("✅ Model loaded successfully")
 
     def generate(self, prompt, max_tokens=512, stop=None, stream=False):
         if not self.llm:
@@ -71,14 +74,13 @@ class LLMEngine:
             return msg
 
         try:
-            formatted_prompt = prompt  # Simplified for now
+            formatted_prompt = prompt
             stop_seq = stop or ["Instruct:", "User:", "###", "<|end_of_text|>"]
 
             if stream:
-                # Stream not fully implemented in simulation
-                yield "Simulation mode - streaming not available."
+                yield "[Simulation Mode] Streaming not fully implemented."
             else:
-                return f"[JARVIS Simulation] Response to: {prompt[:100]}..."
+                return f"[JARVIS] I received your request: {prompt[:80]}..."
         except Exception as e:
             return f"Generation error: {e}"
 
