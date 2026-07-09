@@ -171,7 +171,10 @@
                         if (line.startsWith('data: ')) {
                             const token = line.substring(6);
                             if (token === "[DONE]") break;
-                            jarvisContent.innerHTML += token.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+                            // Sanitize token before insertion
+                            const span = document.createElement('span');
+                            span.innerText = token;
+                            jarvisContent.appendChild(span);
                             container.scrollTop = container.scrollHeight;
                         }
                     }

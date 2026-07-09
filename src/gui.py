@@ -27,45 +27,24 @@ class Panel(QFrame):
 
         self.setLayout(self.layout)
 
-from voice import VoiceInterface
-
 class JarvisWorker(QThread):
-    token_ready = pyqtSignal(str)
     finished = pyqtSignal(str)
 
-    def __init__(self, message, agents):
+    def __init__(self, message, engine_v2):
         super().__init__()
         self.message = message
-        self.agents = agents
+        self.engine_v2 = engine_v2
 
     def run(self):
-        full_response = ""
-        # Get the stream from the commander
-        stream = self.agents['commander'].handle_request(self.message, self.agents, stream=True)
-
-        if isinstance(stream, str):
-            self.finished.emit(stream)
-            return
-
-        for token in stream:
-            full_response += token
-            self.token_ready.emit(token)
-
-        if 'improver' in self.agents:
-            self.agents['improver'].reflect_on_last_interaction()
-
-        self.finished.emit(full_response)
+        # In V2, run synchronous for now to match api.py
+        response = self.engine_v2.run(self.message)
+        self.engine_v2.dispatch_tasks()
+        self.finished.emit(response)
 
 class AmbientUI(QMainWindow):
-    def __init__(self, engine=None, memory=None, agents=None):
+    def __init__(self, engine_v2=None):
         super().__init__()
-        self.engine = engine
-        self.memory = memory
-        self.agents = agents or {}
-        try:
-            self.voice = VoiceInterface()
-        except:
-            self.voice = None
+        self.engine_v2 = engine_v2
         self.setWindowTitle("JARVIS - Phoenix OS Ambient UI")
         self.resize(1024, 768)
 
@@ -129,28 +108,18 @@ class AmbientUI(QMainWindow):
         self.add_chat("You", text)
 
         self.chat_panel.display.append(f"<b>JARVIS:</b> ")
-        self.cursor = self.chat_panel.display.textCursor()
-        self.cursor.movePosition(QTextCursor.MoveOperation.End)
 
-        # Non-blocking streaming
+        # Non-blocking execution
         if hasattr(self, 'worker') and self.worker.isRunning():
             self.worker.terminate()
             self.worker.wait()
 
-        self.worker = JarvisWorker(text, self.agents)
-        self.worker.token_ready.connect(self.append_token)
+        self.worker = JarvisWorker(text, self.engine_v2)
         self.worker.finished.connect(self.finalize_response)
         self.worker.start()
 
-    def append_token(self, token):
-        self.cursor.insertText(token)
-        self.chat_panel.display.ensureCursorVisible()
-
     def finalize_response(self, full_response):
-        # If the display is empty (meaning no streaming happened), show full response
-        if self.cursor.atStart() or self.chat_panel.display.toPlainText().endswith("JARVIS: "):
-            self.cursor.insertText(full_response)
-        self.voice.speak(full_response)
+        self.chat_panel.display.append(full_response)
 
     def submit_command(self):
         cmd = self.command_input.text().strip()
@@ -158,10 +127,9 @@ class AmbientUI(QMainWindow):
         self.command_input.clear()
         self.add_command_output(f"> {cmd}")
 
-        # Simulate system call via Synapse
-        from synapse_bridge import SynapseBridge
-        bridge = SynapseBridge()
-        res = bridge.system_call(cmd)
+        # Direct CEO call for system command orchestration
+        res = self.engine_v2.run(f"SYSTEM: {cmd}")
+        self.engine_v2.dispatch_tasks()
         self.add_command_output(res)
 
     def add_chat(self, sender, message):

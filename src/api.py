@@ -11,12 +11,9 @@ import psutil
 # Add src to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from llm_engine import LLMEngine
-from memory import MemorySystem
-from agents import ResearchAgent, CodingAgent, SelfImprovementAgent, CommanderAgent, PlanningAgent, SecurityAgent, MemoryAgent
-from profiles import HardwareProfile
+from src.v2_main import CognitiveEngineV2
 
-app = FastAPI(title="JARVIS Cognitive API")
+app = FastAPI(title="JARVIS Cognitive API V2")
 
 # Allow browser cross-origin requests
 app.add_middleware(
@@ -26,18 +23,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global instances (Lazy load or init on start)
-memory = MemorySystem()
-engine = LLMEngine()
-agents = {
-    'research': ResearchAgent(engine, memory),
-    'coding': CodingAgent(engine, memory),
-    'planning': PlanningAgent(engine, memory),
-    'security': SecurityAgent(engine, memory),
-    'memory': MemoryAgent(engine, memory),
-    'improver': SelfImprovementAgent(engine, memory),
-    'commander': CommanderAgent(engine, memory)
-}
+# Global instance
+engine_v2 = CognitiveEngineV2()
 
 class ChatRequest(BaseModel):
     message: str
@@ -46,25 +33,24 @@ class ChatRequest(BaseModel):
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     async def event_generator():
         try:
-            # Run the blocking generator in a thread to keep the event loop responsive
-            def get_stream():
-                return agents['commander'].handle_request(request.message, agents, stream=True)
+            # In V2, we process request via CEO and then dispatch
+            # For streaming, we'd need to adapt the event bus to be async/reactive
+            # For now, we return the synchronous result in chunks
+            def get_res():
+                res = engine_v2.run(request.message)
+                engine_v2.dispatch_tasks()
+                return res
 
-            stream_obj = await anyio.to_thread.run_sync(get_stream)
+            result = await anyio.to_thread.run_sync(get_res)
 
-            # If it's a callable (wrapped generator), call it
-            if callable(stream_obj):
-                stream = stream_obj()
-            else:
-                stream = stream_obj
-
-            for token in stream:
-                yield f"data: {token}\n\n"
+            # Since result is a string from CEO in current MVP
+            yield f"data: {result}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: Error: {str(e)}\n\n"
         finally:
-            background_tasks.add_task(agents['improver'].reflect_on_last_interaction)
+            # V2 improvement logic
+            pass
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -90,28 +76,9 @@ async def chat_completions(request: Request):
     data = await request.json()
     messages = data.get("messages", [])
     user_msg = messages[-1]["content"] if messages else ""
-    stream_requested = data.get("stream", False)
 
-    if stream_requested:
-        stream = agents['commander'].handle_request(user_msg, agents, stream=True)
-        async def event_generator():
-            import time
-            import json
-            for token in stream:
-                chunk = {
-                    "id": "chatcmpl-stream",
-                    "object": "chat.completion.chunk",
-                    "created": int(time.time()),
-                    "model": "jarvis-cognitive-engine",
-                    "choices": [{"index": 0, "delta": {"content": token}, "finish_reason": None}]
-                }
-                yield f"data: {json.dumps(chunk)}\n\n"
-            yield "data: [DONE]\n\n"
-            agents['improver'].reflect_on_last_interaction()
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-    response = agents['commander'].handle_request(user_msg, agents)
-    agents['improver'].reflect_on_last_interaction()
+    response = engine_v2.run(user_msg)
+    engine_v2.dispatch_tasks()
 
     import time
     return {
@@ -141,15 +108,14 @@ async def get_status():
         "ram_available": psutil.virtual_memory().available // (1024*1024),
         "disk": psutil.disk_usage('/').percent,
         "os": "Ubuntu (Linux Host)",
-        "memory_facts": len(memory.get_semantic_knowledge(limit=100))
+        "v2_active": True
     }
 
 @app.post("/api/learn")
 async def learn_lang(request: ChatRequest):
-    knowledge = agents['research'].research(f"Core principles and best practices of {request.message} programming language")
-    embedding = engine.embed(knowledge)
-    memory.add_fact("language_principle", request.message, knowledge, embedding=embedding)
-    return {"status": "success", "language": request.message}
+    response = engine_v2.run(f"Learn everything about {request.message}")
+    engine_v2.dispatch_tasks()
+    return {"status": "success", "language": request.message, "response": response}
 
 # Serve static files
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
