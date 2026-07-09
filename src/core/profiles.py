@@ -1,4 +1,6 @@
 import os
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from enum import Enum
 
 class HardwareProfile(Enum):
