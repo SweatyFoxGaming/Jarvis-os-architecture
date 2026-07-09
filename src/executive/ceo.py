@@ -10,10 +10,16 @@ class CEO(ICEO):
     def process_request(self, user_input: str) -> str:
         print(f"[CEO] Processing request: {user_input}")
 
-        # 1. Understand Intent (In V2 this would be an LLM call)
+        # 1. Fast-Path for Greetings/Fillers
+        greetings = ["hi", "hello", "hey", "jarvis", "status", "who are you"]
+        low_input = user_input.lower().strip()
+        if any(g in low_input for g in greetings) and len(low_input.split()) < 4:
+            return "Greetings. I am JARVIS, the Supreme Sovereign of Phoenix OS. How may I direct the swarm for you today?"
+
+        # 2. Understand Intent (In V2 this would be an LLM call)
         # For now, we simulate the intent understanding and department routing
 
-        # 2. Publish UserIntentReceived event
+        # 3. Publish UserIntentReceived event
         self.event_bus.publish(Event(
             event_type="UserIntentReceived",
             source="CEO",
