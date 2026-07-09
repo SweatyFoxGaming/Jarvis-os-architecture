@@ -28,7 +28,7 @@ def main():
 
     # Setup logging
     log_path = "/tmp/jarvis_startup.log"
-    logging.basicConfig(filename=log_path, level=logging.DEBUG,
+    logging.basicConfig(filename=log_path, level=logging.DEBUG, 
                         format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info("JARVIS V3 Starting up...")
 
@@ -37,9 +37,9 @@ def main():
     os.chdir("..") # Go to project root
 
     load_dotenv()
-
+    
     print("--- JARVIS V3: Executive Mind Architecture ---")
-
+    
     # Default to GUI if run without terminal
     is_terminal = sys.stdin.isatty()
 
@@ -53,16 +53,16 @@ def main():
 
     # Terminal Logic
     engine_v3 = CognitiveEngineV3()
-
+    
     print("\nSelect Interface:")
     print("[1] Desktop GUI")
     print("[2] Terminal CLI")
     print("[3] Web Dashboard")
     i_choice = input("Choice: ").strip()
-
+    
     if i_choice == '1':
         app = QApplication(sys.argv)
-        window = AmbientUI(engine_v2)
+        window = AmbientUI(engine_v3)
         window.show()
         sys.exit(app.exec())
     elif i_choice == '3':
@@ -79,11 +79,11 @@ def main():
             break
         if user_input.lower() == 'q':
             break
-
+        
         print("\nExecutive Mind Reasoning...")
         res = engine_v3.run(user_input)
         results = engine_v3.dispatch_tasks()
-
+        
         print(f"\n[Mind] Decision: {res}")
         if results:
             for task_id, output in results.items():
