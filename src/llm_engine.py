@@ -1,5 +1,7 @@
 import os
 import sys
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 try:
     from llama_cpp import Llama
