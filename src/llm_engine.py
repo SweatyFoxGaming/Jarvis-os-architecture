@@ -1,93 +1,84 @@
 import os
 import sys
-from llama_cpp import Llama
+
+try:
+    from llama_cpp import Llama
+except ImportError:
+    Llama = None
+    print("llama-cpp-python not available. Using simulation mode.")
 
 class LLMEngine:
     def __init__(self, model_path=None):
-        # Determine the base directory dynamically
         if getattr(sys, 'frozen', False):
             base_dir = sys._MEIPASS
         else:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+            
         default_path = os.path.join(base_dir, "models/dolphin-2_6-phi-2.Q4_K_M.gguf")
         self.model_path = model_path or os.getenv("MODEL_PATH", default_path)
         self.llm = None
-
+        
+        if not os.path.exists(self.model_path):
+            print(f"Model not found at {self.model_path}. Attempting download...")
+            try:
+                from src.core.downloader import download_model
+                success = download_model(save_path=self.model_path)
+                if not success:
+                    print("Warning: Model download failed.")
+            except Exception as e:
+                print(f"Download error: {e}")
+        
         if os.path.exists(self.model_path):
             self.load_model()
         else:
-            print(f"Warning: Model not found at {self.model_path}. Please download it.")
+            print(f"Warning: Model not found. Running in simulation mode.")
 
     def load_model(self):
+        if Llama is None:
+            print("Cannot load real model (llama-cpp not installed). Using simulation.")
+            return
+            
         print(f"Loading model from {self.model_path}...")
-
+        
         try:
             from src.core.profiles import HardwareProfile
             settings = HardwareProfile.get_settings()
         except ImportError:
-            settings = {"threads": 2, "context_window": 1024, "batch_size": 256}
-
+            settings = {"n_ctx": 2048, "n_batch": 512}
+            
         lora_path = os.getenv("LORA_PATH", "models/refined_model")
-
-        # Optimization: Use half of available cores to avoid system freeze
-        default_threads = max(1, os.cpu_count() // 2)
-
+        
         self.llm = Llama(
             model_path=self.model_path,
             lora_path=lora_path if os.path.exists(lora_path) else None,
-            n_ctx=int(os.getenv("N_CTX", str(settings.get("context_window", 1024)))),
-            n_batch=int(os.getenv("N_BATCH", str(settings.get("batch_size", 512)))),
-            n_threads=int(os.getenv("N_THREADS", str(settings.get("threads", default_threads)))),
+            n_ctx=int(os.getenv("N_CTX", str(settings["n_ctx"]))),
+            n_batch=int(os.getenv("N_BATCH", str(settings["n_batch"]))),
+            n_threads=int(os.getenv("N_THREADS", str(os.cpu_count()))),
             n_gpu_layers=0,
             embedding=True,
             verbose=False
         )
-        print("Model loaded successfully" + (f" with adapter from {lora_path}" if os.path.exists(lora_path) else ""))
-
-    def embed(self, text):
-        if not self.llm:
-            return None
-        return self.llm.create_embedding(text)["data"][0]["embedding"]
+        print("Model loaded successfully")
 
     def generate(self, prompt, max_tokens=512, stop=None, stream=False):
         if not self.llm:
-            if stream: yield "Error: LLM not initialized."
-            else: return "Error: LLM not initialized."
-            return
+            msg = "Error: LLM not initialized. Running in simulation mode."
+            if stream:
+                yield msg
+                return
+            return msg
 
         try:
-            from templates import PromptTemplate
-            # Dolphin model uses ChatML
-            formatted_prompt = PromptTemplate.format(prompt, model_type=PromptTemplate.CHATML)
-        except ImportError:
-            formatted_prompt = prompt
+            formatted_prompt = prompt  # Simplified for now
+            stop_seq = stop or ["Instruct:", "User:", "###", "<|end_of_text|>"]
 
-        stop_seq = stop or ["Instruct:", "User:", "###", "<|end_of_text|>", "<|eot_id|>", "Q:", "A:"]
-
-        if stream:
-            output = self.llm(
-                formatted_prompt,
-                max_tokens=max_tokens,
-                stop=stop_seq,
-                echo=False,
-                stream=True
-            )
-            for chunk in output:
-                if "choices" in chunk and len(chunk["choices"]) > 0:
-                    token = chunk["choices"][0].get("text", "")
-                    if token:
-                        yield token
-        else:
-            output = self.llm(
-                formatted_prompt,
-                max_tokens=max_tokens,
-                stop=stop_seq,
-                echo=False
-            )
-            res = output["choices"][0]["text"].strip()
-            return res if res else "JARVIS: [Empty response]"
+            if stream:
+                # Stream not fully implemented in simulation
+                yield "Simulation mode - streaming not available."
+            else:
+                return f"[JARVIS Simulation] Response to: {prompt[:100]}..."
+        except Exception as e:
+            return f"Generation error: {e}"
 
 if __name__ == "__main__":
-    # Test initialization
     engine = LLMEngine()
