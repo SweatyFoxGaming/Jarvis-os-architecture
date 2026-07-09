@@ -3,10 +3,12 @@ from src.core.interfaces import ICEO, IChiefOfStaff, IEventBus
 from src.core.models import ExecutiveDecision, Goal, Task, Priority, Event, TaskStatus
 from src.core.digital_twin import DigitalTwin
 from src.executive.board import ExecutiveBoard
+from src.templates import PromptTemplate
+from datetime import datetime
 
 class ExecutiveMind(ICEO):
     """
-    The cognitive core of JARVIS. Now handles simple conversation directly.
+    Upgraded JARVIS Executive Mind with comprehensive speaking template.
     """
     def __init__(self, chief_of_staff: IChiefOfStaff, event_bus: IEventBus, digital_twin: DigitalTwin):
         self.cos = chief_of_staff
@@ -18,63 +20,61 @@ class ExecutiveMind(ICEO):
     def process_request(self, user_input: str) -> str:
         print(f"[Mind] Processing Executive Request: {user_input}")
         
-        lower_input = user_input.lower().strip()
+        lower = user_input.lower().strip()
         
-        # Direct responses for casual conversation (more human-like)
-        if any(g in lower_input for g in ["hello", "hi", "hey", "how are you", "status", "who are you"]):
-            direct_response = """Hello! I am JARVIS, the Executive Mind of the Phoenix Intelligence Platform.
-I am fully operational with the complete cognitive architecture active.
-How can I help you today?"""
-            print("[Mind] Direct conversational response.")
-            return direct_response
+        # Direct handling for very simple queries
+        if any(g in lower for g in ["hello", "hi", "hey"]):
+            return "Hello! JARVIS at your service. What can I do for you today?"
+        
+        if "how are you" in lower or "status" in lower or "who are you" in lower:
+            return "I am operating at full capacity. Executive Mind, departments, and memory systems are all active and ready."
 
-        # For more complex requests, use full delegation
-        context_summary = self.twin.get_summary()
+        if "time" in lower:
+            current_time = datetime.now().strftime("%I:%M %p")
+            return f"The current time is {current_time}."
+
+        # Use template for most responses
+        template_context = "You are having a natural conversation with the user."
         
-        board_results = self.board.consult({
-            "intent": user_input,
-            "context": context_summary
-        })
+        formatted_prompt = PromptTemplate.format(user_input, template_context)
         
-        decision = ExecutiveDecision(
-            intent=user_input,
-            context=context_summary,
-            reasoning_summary="Integrated board feedback.",
-            confidence=0.85,
-            expected_outcome="User request fulfilled.",
-            estimated_cost=0.01,
-            estimated_time_sec=30,
-            selected_capabilities=["research_specialist"]
-        )
+        # For now, use simulation since real model may not be loaded
+        if hasattr(self, 'engine') and self.engine and self.engine.llm:
+            response = self.engine.generate(formatted_prompt)
+        else:
+            # Enhanced simulation using template logic
+            response = self._simulate_response(user_input)
         
-        capability = "research_specialist"
-        if any(k in lower_input for k in ["code", "write", "function", "class", "debug", "python", "rust"]):
-            capability = "coding_specialist"
+        # If it's a complex task, still delegate
+        if any(k in lower for k in ["code", "write", "function", "debug", "python", "rust", "build", "create"]):
+            self._delegate_to_department(user_input)
+            return response + "\n\nI'll also route this to the appropriate specialist department for deeper execution."
         
-        new_goal = Goal(
-            title=f"Objective: {user_input[:30]}",
-            description=user_input,
-            alignment="User Request"
-        )
-        self.active_goals.append(new_goal)
+        return response
+
+    def _simulate_response(self, user_input: str) -> str:
+        """Fallback high-quality simulation"""
+        lower = user_input.lower()
         
-        print(f"[Mind] Finalizing Decision: {decision.uuid}")
+        if "joke" in lower:
+            return "Why do programmers prefer dark mode? Because light attracts bugs. 😊"
+        elif "weather" in lower:
+            return "I don't have real-time weather access in this simulation, but I can help you plan around it if you tell me your location."
+        elif "thank" in lower:
+            return "You're very welcome. I'm here whenever you need me."
+        else:
+            return f"I understand you're asking about '{user_input}'. How would you like me to help with this?"
+
+    def _delegate_to_department(self, user_input: str):
+        """Helper to delegate complex tasks"""
+        capability = "coding_specialist" if any(k in user_input.lower() for k in ["code", "write", "function"]) else "research_specialist"
         
         task = Task(
             creator_id="ExecutiveMind",
             target_capability=capability,
-            input_data={"request": user_input, "executive_context": decision.dict()}
+            input_data={"request": user_input}
         )
-        
-        self.event_bus.publish(Event(
-            event_type="ExecutiveDecisionFinalized",
-            source="ExecutiveMind",
-            payload=decision.dict()
-        ))
-        
         self.cos.schedule_task(task)
-        
-        return f"Understood. Orchestrating {capability} for your request..."
 
     def assess_vision(self):
         pass
