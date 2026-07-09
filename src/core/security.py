@@ -1,5 +1,7 @@
 from typing import List, Dict, Any, Optional
 import os
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class SecurityPolicy:
     def __init__(self):
