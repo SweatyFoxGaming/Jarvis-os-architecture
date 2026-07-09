@@ -1,6 +1,8 @@
 import psutil
 import platform
 import multiprocessing
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from typing import Dict, Any
 
 class HardwareManager:
