@@ -11,9 +11,9 @@ import psutil
 # Add src to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.v2_main import CognitiveEngineV2
+from src.v2_main import CognitiveEngineV3
 
-app = FastAPI(title="JARVIS Cognitive API V2")
+app = FastAPI(title="JARVIS Cognitive API V3")
 
 # Allow browser cross-origin requests
 app.add_middleware(
@@ -24,7 +24,7 @@ app.add_middleware(
 )
 
 # Global instance
-engine_v2 = CognitiveEngineV2()
+engine_v3 = CognitiveEngineV3()
 
 class ChatRequest(BaseModel):
     message: str
@@ -33,14 +33,12 @@ class ChatRequest(BaseModel):
 async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
     async def event_generator():
         try:
-            # In V2, we process request via CEO and then dispatch
-            # For streaming, we'd need to adapt the event bus to be async/reactive
-            # For now, we return the synchronous result in chunks
+            # In V3, we process request via Executive Mind and then dispatch
             def get_res():
-                res = engine_v2.run(request.message)
-                results = engine_v2.dispatch_tasks()
+                res = engine_v3.run(request.message)
+                results = engine_v3.dispatch_tasks()
 
-                final_output = f"[Executive]: {res}\n\n"
+                final_output = f"[Executive Mind]: {res}\n\n"
                 if results:
                     for task_id, output in results.items():
                         # Extract the main content from specialist output
@@ -83,8 +81,8 @@ async def chat_completions(request: Request):
     messages = data.get("messages", [])
     user_msg = messages[-1]["content"] if messages else ""
 
-    response = engine_v2.run(user_msg)
-    engine_v2.dispatch_tasks()
+    response = engine_v3.run(user_msg)
+    engine_v3.dispatch_tasks()
 
     import time
     return {
@@ -119,8 +117,8 @@ async def get_status():
 
 @app.post("/api/learn")
 async def learn_lang(request: ChatRequest):
-    response = engine_v2.run(f"Learn everything about {request.message}")
-    engine_v2.dispatch_tasks()
+    response = engine_v3.run(f"Learn everything about {request.message}")
+    engine_v3.dispatch_tasks()
     return {"status": "success", "language": request.message, "response": response}
 
 # Serve static files

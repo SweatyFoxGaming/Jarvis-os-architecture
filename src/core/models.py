@@ -24,6 +24,13 @@ class ResourceBudget(BaseModel):
     token_limit: int = 2048
     time_limit_sec: int = 60
 
+class RiskLevel(Enum):
+    NEGLIGIBLE = 0
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+    CRITICAL = 4
+
 class Goal(BaseModel):
     uuid: UUID = Field(default_factory=uuid4)
     title: str
@@ -32,6 +39,23 @@ class Goal(BaseModel):
     parent_goal: Optional[UUID] = None
     priority: Priority = Priority.MEDIUM
     deadline: Optional[datetime] = None
+    alignment: str = "Strategic" # Vision alignment
+
+class ExecutiveDecision(BaseModel):
+    uuid: UUID = Field(default_factory=uuid4)
+    timestamp: datetime = Field(default_factory=datetime.now)
+    intent: str
+    context: str
+    goals: List[UUID] = []
+    selected_capabilities: List[str] = []
+    reasoning_summary: str
+    confidence: float
+    expected_outcome: str
+    estimated_cost: float
+    estimated_time_sec: int
+    risks: List[Dict[str, Any]] = []
+    alternatives: List[str] = []
+    approved: bool = False
 
 class Capability(BaseModel):
     name: str

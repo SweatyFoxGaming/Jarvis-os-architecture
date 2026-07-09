@@ -1,12 +1,18 @@
-# Phoenix LLM (JARVIS Core)
+# Phoenix Intelligence Platform (JARVIS V3)
 
-The specialized, self-improving LLM engine for Phoenix OS (AIOS). While optimized as the central cognitive layer for AI-native hardware, JARVIS is a full-featured, general-purpose AI assistant capable of handling any research, coding, or planning task.
+The high-level **Executive Mind** and cognitive core for Phoenix OS (AIOS). Designed as an intelligent organization rather than a chatbot, JARVIS V3 implements a permanent executive hierarchy capable of strategic reasoning, long-term planning, and autonomous self-evolution.
 
-## 🧠 Cognitive Architecture
+## 🧠 Cognitive Architecture (V3)
 
-Phoenix LLM (JARVIS) uses a multi-agent orchestration model designed to balance high-level intelligence with the strict 1-2GB RAM constraints of Phoenix OS hardware.
+Phoenix JARVIS follows a Constitution-aligned **Executive Mind** architecture. It separates the "thinking" (Executive) from the "doing" (Specialist Departments), ensuring the system can scale for decades without architectural redesign.
 
-### 1. Multi-Agent Swarm
+### 1. Executive Hierarchy
+- **Executive Mind**: The cognitive core. It performs strategic reasoning, intent analysis, and goal management.
+- **Executive Board**: An internal reasoning council of specialized engines (Strategy, Planning, Risk, Resource, Context, Memory, Ethics, World Model).
+- **Chief of Staff**: The operational orchestrator. It transforms executive decisions into coordinated department tasks.
+- **Capability Registry**: The platform's nervous system. It maps strategic requirements to specialized departmental skills.
+
+### 2. Multi-Agent Organization
 - **Commander (Personality Layer)**: The primary interface. It handles general chat, maintains the JARVIS persona (calm, capable, professional), and orchestrates tasks by delegating to specialized agents or calling system functions.
 - **Research Agent**: Specialized in multi-source information gathering. It integrates **real-time web search** (via Brave Search API) and cross-references results with local memory.
 - **Coding Agent**: Specialized in code analysis, debugging, and review. It is pre-seeded with knowledge of the Phoenix OS (Rust/no_std) kernel architecture.
@@ -63,7 +69,7 @@ JARVIS requires specific build tools and system libraries to run its AI engine o
 ```bash
 sudo apt update
 sudo apt install -y build-essential cmake python3-pip python3-venv python3-dev \
-                    python3-pyqt6 espeak libportaudio2
+                    python3-pyqt6 espeak libportaudio2 portaudio19-dev python3-all-dev
 ```
 
 ### 3. Setup Virtual Environment

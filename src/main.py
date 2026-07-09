@@ -7,7 +7,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from src.v2_main import CognitiveEngineV2
+from src.v2_main import CognitiveEngineV3
 from src.gui import AmbientUI
 from PyQt6.QtWidgets import QApplication
 
@@ -24,13 +24,13 @@ import logging
 
 def main():
     # Set app identity
-    os.environ["APP_IDENTITY"] = "JARVIS-COGNITIVE-ENGINE-V2"
+    os.environ["APP_IDENTITY"] = "JARVIS-COGNITIVE-ENGINE-V3"
 
     # Setup logging
     log_path = "/tmp/jarvis_startup.log"
     logging.basicConfig(filename=log_path, level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info("JARVIS V2 Starting up...")
+    logging.info("JARVIS V3 Starting up...")
 
     # Setup absolute pathing for standalone execution
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +38,7 @@ def main():
 
     load_dotenv()
 
-    print("--- JARVIS V2: Supreme Sovereign of Phoenix OS ---")
+    print("--- JARVIS V3: Executive Mind Architecture ---")
 
     # Default to GUI if run without terminal
     is_terminal = sys.stdin.isatty()
@@ -46,13 +46,13 @@ def main():
     if not is_terminal:
         logging.info("Non-terminal environment detected. Launching GUI.")
         app = QApplication(sys.argv)
-        engine_v2 = CognitiveEngineV2()
-        window = AmbientUI(engine_v2)
+        engine_v3 = CognitiveEngineV3()
+        window = AmbientUI(engine_v3)
         window.show()
         sys.exit(app.exec())
 
     # Terminal Logic
-    engine_v2 = CognitiveEngineV2()
+    engine_v3 = CognitiveEngineV3()
 
     print("\nSelect Interface:")
     print("[1] Desktop GUI")
@@ -72,7 +72,7 @@ def main():
         sys.exit(0)
 
     while True:
-        print("\nJARVIS V2 Command Line")
+        print("\nJARVIS V3 Executive Terminal")
         try:
             user_input = input("Request (q to quit): ").strip()
         except EOFError:
@@ -80,11 +80,11 @@ def main():
         if user_input.lower() == 'q':
             break
 
-        print("\nOrchestrating...")
-        res = engine_v2.run(user_input)
-        results = engine_v2.dispatch_tasks()
+        print("\nExecutive Mind Reasoning...")
+        res = engine_v3.run(user_input)
+        results = engine_v3.dispatch_tasks()
 
-        print(f"\n[CEO] Status: {res}")
+        print(f"\n[Mind] Decision: {res}")
         if results:
             for task_id, output in results.items():
                 print(f"\n[Specialist Output]:\n{output}")

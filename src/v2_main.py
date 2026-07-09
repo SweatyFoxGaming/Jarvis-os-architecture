@@ -11,7 +11,7 @@ from src.core.registry import DepartmentRegistry, CapabilityRegistry
 from src.core.hardware import HardwareManager
 from src.core.model_manager import ModelManager
 from src.executive.chief_of_staff import ChiefOfStaff
-from src.executive.ceo import CEO
+from src.executive.mind import ExecutiveMind
 from src.departments.research import ResearchDepartment
 from src.departments.coding import CodingDepartment
 from src.core.digital_twin import DigitalTwin
@@ -19,7 +19,7 @@ from src.core.bootstrapping import register_initial_capabilities
 
 from src.llm_engine import LLMEngine
 
-class CognitiveEngineV2:
+class CognitiveEngineV3:
     def __init__(self):
         # 1. Infrastructure
         self.event_bus = EventBus()
@@ -33,9 +33,10 @@ class CognitiveEngineV2:
         self.model_manager = ModelManager(settings)
         self.engine = LLMEngine() # Initialize core engine
 
-        # 2. Executive Layer
+        # 2. Executive Hierarchy
         self.cos = ChiefOfStaff(self.event_bus, self.cap_registry, self.dept_registry)
-        self.ceo = CEO(self.cos, self.event_bus, self.twin)
+        # JARVIS V3: Using Executive Mind as the cognitive core
+        self.mind = ExecutiveMind(self.cos, self.event_bus, self.twin)
 
         # 3. Departments
         self.research_dept = ResearchDepartment(self.engine)
@@ -58,7 +59,8 @@ class CognitiveEngineV2:
         self.twin.update_capabilities(self.cap_registry.list_capabilities())
 
     def run(self, user_input: str):
-        return self.ceo.process_request(user_input)
+        # Dispatch to the Executive Mind
+        return self.mind.process_request(user_input)
 
     def dispatch_tasks(self) -> dict:
         """
@@ -75,9 +77,9 @@ class CognitiveEngineV2:
         return results
 
 if __name__ == "__main__":
-    engine = CognitiveEngineV2()
-    print("--- JARVIS Cognitive Engine V2 Online ---")
-    response = engine.run("Research memory allocation in Rust")
+    engine = CognitiveEngineV3()
+    print("--- JARVIS Cognitive Engine V3: Executive Mind Architecture Online ---")
+    response = engine.run("Research the future of decentralized AI")
     print(response)
 
     # Process the task
