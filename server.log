@@ -1,0 +1,26 @@
+INFO:     Started server process [1101817]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+Warning: Model not found at /app/models/dolphin-2_6-phi-2.Q4_K_M.gguf. Please download it.
+[Research] Registered worker: research-worker-01
+[Coding] Registered worker: coding-worker-01
+[Registry] Registered department: Research
+[Registry] Registered department: Coding
+[Registry] Registered capability 'research' to 'Research'
+[Registry] Registered capability 'coding' to 'Coding'
+INFO:     127.0.0.1:39926 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39926 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39926 - "POST /api/chat HTTP/1.1" 200 OK
+[CEO] Processing request: Research the latest Rust features for Phoenix OS
+[EventBus] Publishing: UserIntentReceived from CEO
+[CoS] Scheduling task 5766ca6a-a72c-4136-a6e1-8ee2f94d9a7e for department Research
+[EventBus] Publishing: DepartmentAssigned from ChiefOfStaff
+[Research] Manager handling task 5766ca6a-a72c-4136-a6e1-8ee2f94d9a7e
+[ResearchWorker] Performing deep research on: Research the latest Rust features for Phoenix OS
+[EventBus] Publishing: TaskCompleted from Research
+[CoS] Task 5766ca6a-a72c-4136-a6e1-8ee2f94d9a7e marked as COMPLETED
+INFO:     127.0.0.1:39926 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39926 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39926 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39926 - "GET /api/status HTTP/1.1" 200 OK

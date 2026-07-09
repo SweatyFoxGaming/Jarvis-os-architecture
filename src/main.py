@@ -2,8 +2,10 @@ import sys
 import os
 from dotenv import load_dotenv
 
-# Add src to path if needed
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Ensure the project root is in the path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from src.v2_main import CognitiveEngineV2
 from src.gui import AmbientUI
@@ -71,7 +73,10 @@ def main():
 
     while True:
         print("\nJARVIS V2 Command Line")
-        user_input = input("Request (q to quit): ").strip()
+        try:
+            user_input = input("Request (q to quit): ").strip()
+        except EOFError:
+            break
         if user_input.lower() == 'q':
             break
 

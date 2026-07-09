@@ -1,3 +1,11 @@
+import os
+import sys
+
+# Ensure the project root is in the path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from src.core.event_bus import EventBus
 from src.core.registry import DepartmentRegistry, CapabilityRegistry
 from src.core.hardware import HardwareManager

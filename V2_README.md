@@ -25,6 +25,30 @@ src/
 └── v2_main.py              # System Entry Point & Orchestration
 ```
 
+## Execution
+To run the JARVIS V2 Cognitive Engine, use the following commands from the project root:
+
+### CLI Mode
+```bash
+python3 src/main.py
+```
+
+### Web Dashboard
+Select option `[3]` after running the CLI command above, or run directly:
+```bash
+python3 -m uvicorn src.api:app --host 0.0.0.0 --port 8000
+```
+
+### Direct Framework Test
+```bash
+python3 src/v2_main.py
+```
+
+### Diagnostics
+```bash
+python3 src/v2_diagnostics.py
+```
+
 ## System Workflow Diagram (Mermaid)
 
 ```mermaid
