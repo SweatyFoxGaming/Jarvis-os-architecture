@@ -28,7 +28,7 @@ class BaseDepartmentManager(IDepartmentManager):
         print(f"[{self.department_name}] Registered worker: {profile['id']}")
 
     def handle_task(self, task: Task) -> None:
-        print(f"[{self.department_name}] Manager handling task {task.uuid}")
+        print(f"[{self.department_name}] Manager handling task {task.uuid} (Requirement: {task.target_capability})")
         task.status = TaskStatus.IN_PROGRESS
         self.active_tasks[str(task.uuid)] = task
 

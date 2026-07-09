@@ -14,6 +14,8 @@ from src.executive.chief_of_staff import ChiefOfStaff
 from src.executive.ceo import CEO
 from src.departments.research import ResearchDepartment
 from src.departments.coding import CodingDepartment
+from src.core.digital_twin import DigitalTwin
+from src.core.bootstrapping import register_initial_capabilities
 
 from src.llm_engine import LLMEngine
 
@@ -23,15 +25,17 @@ class CognitiveEngineV2:
         self.event_bus = EventBus()
         self.dept_registry = DepartmentRegistry()
         self.cap_registry = CapabilityRegistry()
+        self.twin = DigitalTwin()
 
         hardware_info = HardwareManager.detect_hardware()
+        self.twin.update_hardware(hardware_info)
         settings = HardwareManager.get_optimized_settings(hardware_info)
         self.model_manager = ModelManager(settings)
         self.engine = LLMEngine() # Initialize core engine
 
         # 2. Executive Layer
-        self.cos = ChiefOfStaff(self.event_bus)
-        self.ceo = CEO(self.cos, self.event_bus)
+        self.cos = ChiefOfStaff(self.event_bus, self.cap_registry, self.dept_registry)
+        self.ceo = CEO(self.cos, self.event_bus, self.twin)
 
         # 3. Departments
         self.research_dept = ResearchDepartment(self.engine)
@@ -49,22 +53,26 @@ class CognitiveEngineV2:
         self.dept_registry.register(self.research_dept)
         self.dept_registry.register(self.coding_dept)
 
-        # Register capabilities
-        self.cap_registry.register_capability("research", "Research")
-        self.cap_registry.register_capability("coding", "Coding")
+        # Register capabilities (Constitution-aligned bootstrapping)
+        register_initial_capabilities(self.cap_registry)
+        self.twin.update_capabilities(self.cap_registry.list_capabilities())
 
     def run(self, user_input: str):
         return self.ceo.process_request(user_input)
 
-    def dispatch_tasks(self):
+    def dispatch_tasks(self) -> dict:
         """
         Simulation of the EventBus/ChiefOfStaff dispatch loop.
-        In a real system, this would be reactive.
+        Returns a dictionary of results for any completed tasks.
         """
+        results = {}
         for task_id, task in list(self.cos.active_tasks.items()):
-            dept = self.dept_registry.get_department(task.target_department)
+            dept = self.dept_registry.get_department(task.assigned_department_id)
             if dept:
                 dept.process_task(task)
+                if task.status.value == "completed":
+                    results[task_id] = task.output_data
+        return results
 
 if __name__ == "__main__":
     engine = CognitiveEngineV2()

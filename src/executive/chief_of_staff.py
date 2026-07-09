@@ -2,23 +2,39 @@ from typing import Dict, Any, List
 from src.core.interfaces import IChiefOfStaff, IEventBus
 from src.core.models import Task, TaskStatus, Event, Priority
 
+from src.core.registry import CapabilityRegistry, DepartmentRegistry
+
 class ChiefOfStaff(IChiefOfStaff):
-    def __init__(self, event_bus: IEventBus):
+    """
+    Chief of Staff focuses on execution.
+    Organizes work, coordinates departments, manages priorities.
+    """
+    def __init__(self, event_bus: IEventBus, cap_registry: CapabilityRegistry, dept_registry: DepartmentRegistry):
         self.event_bus = event_bus
+        self.cap_registry = cap_registry
+        self.dept_registry = dept_registry
         self.active_tasks: Dict[str, Task] = {}
         self.event_bus.subscribe("TaskCompleted", self._on_task_completed)
         self.event_bus.subscribe("TaskFailed", self._on_task_failed)
 
     def schedule_task(self, task: Task) -> None:
-        print(f"[CoS] Scheduling task {task.uuid} for department {task.target_department}")
+        # Resolve capability to department
+        dept_name = self.cap_registry.find_department(task.target_capability)
+        if not dept_name:
+            print(f"[CoS] ERROR: No department owns capability '{task.target_capability}'")
+            task.status = TaskStatus.FAILED
+            return
+
+        print(f"[CoS] Mapping capability '{task.target_capability}' to '{dept_name}'")
+        task.assigned_department_id = dept_name
         task.status = TaskStatus.ASSIGNED
         self.active_tasks[str(task.uuid)] = task
 
-        # Publish event to notify department
+        # Publish event to notify department manager
         self.event_bus.publish(Event(
             event_type="DepartmentAssigned",
             source="ChiefOfStaff",
-            payload={"task_id": str(task.uuid), "department": task.target_department}
+            payload={"task_id": str(task.uuid), "department": dept_name}
         ))
 
     def monitor_progress(self) -> Dict[str, Any]:

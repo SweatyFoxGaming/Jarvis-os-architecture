@@ -38,12 +38,18 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
             # For now, we return the synchronous result in chunks
             def get_res():
                 res = engine_v2.run(request.message)
-                engine_v2.dispatch_tasks()
-                return res
+                results = engine_v2.dispatch_tasks()
+
+                final_output = f"[Executive]: {res}\n\n"
+                if results:
+                    for task_id, output in results.items():
+                        # Extract the main content from specialist output
+                        content = output.get("report") or output.get("code") or str(output)
+                        final_output += f"[Specialist]: {content}\n"
+                return final_output
 
             result = await anyio.to_thread.run_sync(get_res)
 
-            # Since result is a string from CEO in current MVP
             yield f"data: {result}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:

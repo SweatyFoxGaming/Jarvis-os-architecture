@@ -82,8 +82,12 @@ def main():
 
         print("\nOrchestrating...")
         res = engine_v2.run(user_input)
-        engine_v2.dispatch_tasks()
-        print(f"\nResponse: {res}")
+        results = engine_v2.dispatch_tasks()
+
+        print(f"\n[CEO] Status: {res}")
+        if results:
+            for task_id, output in results.items():
+                print(f"\n[Specialist Output]:\n{output}")
 
 if __name__ == "__main__":
     main()

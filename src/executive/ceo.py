@@ -1,46 +1,57 @@
-from typing import Optional
+from typing import Optional, List
 from src.core.interfaces import ICEO, IChiefOfStaff, IEventBus
-from src.core.models import Task, Event, Priority
+from src.core.models import Task, Event, Priority, Goal, TaskStatus
+from src.core.digital_twin import DigitalTwin
 
 class CEO(ICEO):
-    def __init__(self, chief_of_staff: IChiefOfStaff, event_bus: IEventBus):
+    """
+    JARVIS is the CEO.
+    Answers: What are we trying to accomplish? Why? Who? Is it acceptable?
+    """
+    def __init__(self, chief_of_staff: IChiefOfStaff, event_bus: IEventBus, digital_twin: DigitalTwin):
         self.cos = chief_of_staff
         self.event_bus = event_bus
+        self.twin = digital_twin
+        self.goals: List[Goal] = []
 
     def process_request(self, user_input: str) -> str:
-        print(f"[CEO] Processing request: {user_input}")
+        print(f"[CEO] Strategy session for: {user_input}")
 
-        # 1. Fast-Path for Greetings/Fillers
-        greetings = ["hi", "hello", "hey", "jarvis", "status", "who are you"]
+        # 1. Constitution Check / Fast-Path
+        greetings = ["hi", "hello", "hey", "jarvis", "who are you"]
         low_input = user_input.lower().strip()
         if any(g in low_input for g in greetings) and len(low_input.split()) < 4:
-            return "Greetings. I am JARVIS, the Supreme Sovereign of Phoenix OS. How may I direct the swarm for you today?"
+            return "I am JARVIS. I lead the Phoenix Intelligence Swarm. What is our objective?"
 
-        # 2. Understand Intent (In V2 this would be an LLM call)
-        # For now, we simulate the intent understanding and department routing
+        # 2. Intent & Goal Management
+        # Define a high-level goal
+        new_goal = Goal(
+            title=f"Fulfill request: {user_input[:30]}...",
+            description=user_input,
+            priority=Priority.MEDIUM
+        )
+        self.goals.append(new_goal)
 
-        # 3. Publish UserIntentReceived event
-        self.event_bus.publish(Event(
-            event_type="UserIntentReceived",
-            source="CEO",
-            payload={"input": user_input}
-        ))
+        # 3. Capability-based Orchestration (CEO thinks in capabilities, not departments)
+        # Simplified reasoning for V2 Constitution alignment
+        capability = "research_specialist"
+        if any(k in low_input for k in ["code", "write", "fix", "rust", "python"]):
+            capability = "coding_specialist"
 
-        # 3. Determine Goal and Constraints
-        # Simplified routing for MVP
-        department = "Research"
-        if "code" in user_input.lower() or "write" in user_input.lower():
-            department = "Coding"
-
-        # 4. Create Task
-        new_task = Task(
+        # 4. Delegate to Chief of Staff via Event Bus
+        task = Task(
             creator_id="CEO",
-            target_department=department,
+            target_capability=capability,
             priority=Priority.MEDIUM,
-            input_data={"request": user_input}
+            input_data={"objective": user_input, "context": self.twin.get_summary()}
         )
 
-        # 5. Delegate to Chief of Staff
-        self.cos.schedule_task(new_task)
+        self.event_bus.publish(Event(
+            event_type="GoalEstablished",
+            source="CEO",
+            payload={"goal_id": str(new_goal.uuid), "task_id": str(task.uuid)}
+        ))
 
-        return f"Executive order issued. {department} Department is on the case. (Task ID: {new_task.uuid})"
+        self.cos.schedule_task(task)
+
+        return f"Strategic Goal established. Requirement: {capability}. (Task: {task.uuid})"

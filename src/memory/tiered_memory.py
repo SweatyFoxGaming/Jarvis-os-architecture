@@ -20,6 +20,9 @@ class HierarchicalMemory:
         self.episodic = MemoryTier("Episodic")
         self.semantic = MemoryTier("Semantic")
         self.procedural = MemoryTier("Procedural")
+        self.executive = MemoryTier("Executive")
+        self.project = MemoryTier("Project")
+        self.environmental = MemoryTier("Environmental")
 
     def store_episode(self, content: Any, importance: float = 0.5):
         record = MemoryRecord(source="system", content=content, importance=importance)

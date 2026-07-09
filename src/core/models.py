@@ -24,10 +24,32 @@ class ResourceBudget(BaseModel):
     token_limit: int = 2048
     time_limit_sec: int = 60
 
+class Goal(BaseModel):
+    uuid: UUID = Field(default_factory=uuid4)
+    title: str
+    description: str
+    status: TaskStatus = TaskStatus.PENDING
+    parent_goal: Optional[UUID] = None
+    priority: Priority = Priority.MEDIUM
+    deadline: Optional[datetime] = None
+
+class Capability(BaseModel):
+    name: str
+    purpose: str
+    inputs: Dict[str, str] = {}
+    outputs: Dict[str, str] = {}
+    dependencies: List[str] = []
+    required_permissions: List[str] = []
+    estimated_cost: float = 0.0
+    estimated_time_sec: int = 0
+    confidence: float = 1.0
+    required_resources: Dict[str, Any] = {}
+
 class Task(BaseModel):
     uuid: UUID = Field(default_factory=uuid4)
     creator_id: str
-    target_department: str
+    target_capability: str
+    assigned_department_id: Optional[str] = None
     assigned_worker_id: Optional[str] = None
     priority: Priority = Priority.MEDIUM
     status: TaskStatus = TaskStatus.PENDING
