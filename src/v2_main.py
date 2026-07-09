@@ -1,5 +1,7 @@
 import os
 import sys
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Ensure the project root is in the path for direct execution
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
