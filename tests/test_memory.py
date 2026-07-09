@@ -1,5 +1,7 @@
 import unittest
 import os
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from src.memory import MemorySystem
 
 class TestMemory(unittest.TestCase):
