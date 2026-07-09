@@ -1,4 +1,6 @@
 import pytest
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 from src.core.event_bus import EventBus
 from src.core.models import Event
 
