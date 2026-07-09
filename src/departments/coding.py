@@ -3,16 +3,21 @@ from src.core.models import Task, TaskStatus
 
 class CodingWorker(BaseWorker):
     def execute(self, task: Task) -> Task:
-        # V3 compatibility: look for 'objective' from Executive Mind
-        request = task.input_data.get("objective") or task.input_data.get("request", "")
-        print(f"[CodingWorker] Generating code for: {request}")
-
+        query = task.input_data.get("request", task.input_data.get("objective", ""))
+        print(f"[CodingWorker] Processing coding task: {query[:80]}...")
+        
         if not self.engine:
-            task.output_data = {"code": "print('hello')", "language": "python"}
+            response = "Code generation is ready. Provide a specific coding request."
         else:
-            prompt = f"System: Coding specialist. Task: {request}"
-            task.output_data = {"code": self.engine.generate(prompt)}
+            prompt = f"""You are JARVIS Coding Specialist.
+You are an expert programmer with deep knowledge of Python, Rust, and system architecture.
 
+Task: {query}
+
+Provide clean, well-commented code or analysis:"""
+            response = self.engine.generate(prompt)
+        
+        task.output_data = {"code": response, "language": "python"}
         task.status = TaskStatus.COMPLETED
         task.progress = 1.0
         return task
@@ -24,5 +29,4 @@ class CodingDepartment(BaseDepartment):
 
     def initialize(self, event_bus):
         super().initialize(event_bus)
-        # Add workers
         self.manager.register_worker(CodingWorker("coding-worker-01", self.engine))
