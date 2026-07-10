@@ -14,6 +14,7 @@ import json
 import traceback
 from typing import Optional
 from contextlib import asynccontextmanager
+from src.memory.knowledge_librarian import KnowledgeLibrarian
 
 # ---------- PATH SETUP ----------
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +25,7 @@ if PROJECT_ROOT not in sys.path:
 logger = logging.getLogger(__name__)
 
 # ---------- FASTAPI IMPORTS ----------
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Depends, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +51,7 @@ from src.core.security import SecurityModule
 # ---------- GLOBALS ----------
 _engine: Optional[CognitiveEngineV3] = None
 _secure_memory = None
+_librarian: Optional[KnowledgeLibrarian] = None 
 
 
 # ---------- LIFESPAN MANAGER ----------
@@ -59,7 +61,7 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup and shutdown.
     Initializes the engine and cleans up on exit.
     """
-    global _engine, _secure_memory
+    global _engine, _secure_memory, _librarian
 
     # Startup
     logger.info("[API] Starting up...")
@@ -79,6 +81,8 @@ async def lifespan(app: FastAPI):
         if _secure_memory and hasattr(_engine, 'set_secure_memory'):
             _engine.set_secure_memory(_secure_memory)
             logger.info("[API] Secure memory attached to engine.")
+            _librarian = KnowledgeLibrarian(_engine.memory, secure_memory=_secure_memory)
+        logger.info("[API] KnowledgeLibrarian initialized.")
 
         logger.info("[API] Cognitive Engine V3 initialized successfully.")
     except Exception as e:
@@ -95,6 +99,12 @@ async def lifespan(app: FastAPI):
             logger.info("[API] Engine shut down.")
         except Exception as e:
             logger.warning(f"[API] Engine shutdown error: {e}")
+    if _librarian and hasattr(_librarian, 'shutdown'):
+        try:
+            _librarian.shutdown()
+            logger.info("[API] Librarian shut down.")
+        except Exception as e:
+            logger.warning(f"[API] Librarian shutdown error: {e}")
     if _secure_memory and hasattr(_secure_memory, 'close'):
         try:
             _secure_memory.close()
@@ -331,8 +341,6 @@ async def generic_exception_handler(request: Request, exc: Exception):
         content={"error": "Internal Server Error", "detail": str(exc)},
     )
 # ---------- VERIFICATION ENDPOINTS ----------
-# Add these AFTER your existing endpoints, BEFORE the main entry point.
-
 @app.get("/api/memory/pending")
 async def get_pending_records():
     """Retrieve all pending records awaiting human verification."""
