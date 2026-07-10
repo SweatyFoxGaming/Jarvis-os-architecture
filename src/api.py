@@ -330,7 +330,33 @@ async def generic_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": "Internal Server Error", "detail": str(exc)},
     )
+# ---------- VERIFICATION ENDPOINTS ----------
+# Add these AFTER your existing endpoints, BEFORE the main entry point.
 
+@app.get("/api/memory/pending")
+async def get_pending_records():
+    """Retrieve all pending records awaiting human verification."""
+    if _librarian is None:
+        raise HTTPException(status_code=503, detail="Librarian not initialized")
+    return _librarian.get_pending_records()
+
+@app.post("/api/memory/verify/{record_uuid}")
+async def verify_record(record_uuid: str, approve: bool = Query(...)):
+    """Approve or reject a pending record."""
+    if _librarian is None:
+        raise HTTPException(status_code=503, detail="Librarian not initialized")
+    success = _librarian.verify_record(record_uuid, approve)
+    if not success:
+        raise HTTPException(status_code=404, detail="Record not found or already processed")
+    return {"status": "success"}
+
+@app.post("/api/memory/verify_all")
+async def verify_all_pending(approve: bool = Query(...)):
+    """Bulk approve/reject all pending records."""
+    if _librarian is None:
+        raise HTTPException(status_code=503, detail="Librarian not initialized")
+    count = _librarian.verify_all_pending(approve)
+    return {"processed": count}
 
 # ---------- MAIN ENTRY ----------
 if __name__ == "__main__":
