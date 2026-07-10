@@ -8,7 +8,7 @@ from datetime import datetime
 
 class ExecutiveMind(ICEO):
     """
-    Upgraded JARVIS Executive Mind with comprehensive speaking template.
+    Final upgraded JARVIS Executive Mind with strong natural conversation.
     """
     def __init__(self, chief_of_staff: IChiefOfStaff, event_bus: IEventBus, digital_twin: DigitalTwin):
         self.cos = chief_of_staff
@@ -18,55 +18,61 @@ class ExecutiveMind(ICEO):
         self.active_goals: List[Goal] = []
 
     def process_request(self, user_input: str) -> str:
-        print(f"[Mind] Processing Executive Request: {user_input}")
+        print(f"[Mind] Processing: {user_input}")
         
         lower = user_input.lower().strip()
         
-        # Direct handling for very simple queries
-        if any(g in lower for g in ["hello", "hi", "hey"]):
-            return "Hello! JARVIS at your service. What can I do for you today?"
-        
-        if "how are you" in lower or "status" in lower or "who are you" in lower:
-            return "I am operating at full capacity. Executive Mind, departments, and memory systems are all active and ready."
+        # Quick direct responses for best natural flow
+        if any(word in lower for word in ["hello", "hi", "hey", "greetings"]):
+            return "Hello! JARVIS at your service. What’s on your mind today?"
+
+        if "how are you" in lower or "status" in lower:
+            return "I'm running perfectly — all cognitive systems and departments are online and ready."
+
+        if "who are you" in lower:
+            return "I am JARVIS, the Executive Mind of the Phoenix Intelligence Platform. Think of me as your strategic partner."
 
         if "time" in lower:
             current_time = datetime.now().strftime("%I:%M %p")
             return f"The current time is {current_time}."
 
-        # Use template for most responses
-        template_context = "You are having a natural conversation with the user."
+        if "thank" in lower:
+            return "You're very welcome. I'm glad I could help."
+
+        if "joke" in lower:
+            return "Why do programmers prefer dark mode? Because light attracts bugs."
+
+        # Use rich template for most other queries
+        formatted_prompt = PromptTemplate.format(user_input)
         
-        formatted_prompt = PromptTemplate.format(user_input, template_context)
-        
-        # For now, use simulation since real model may not be loaded
-        if hasattr(self, 'engine') and self.engine and self.engine.llm:
+        # Generate response (simulation or real)
+        if hasattr(self, 'engine') and getattr(self.engine, 'llm', None):
             response = self.engine.generate(formatted_prompt)
         else:
-            # Enhanced simulation using template logic
-            response = self._simulate_response(user_input)
+            response = self._natural_response(user_input)
         
-        # If it's a complex task, still delegate
-        if any(k in lower for k in ["code", "write", "function", "debug", "python", "rust", "build", "create"]):
-            self._delegate_to_department(user_input)
-            return response + "\n\nI'll also route this to the appropriate specialist department for deeper execution."
+        # Delegate only when clearly needed
+        if any(k in lower for k in ["code", "write", "function", "debug", "python", "rust", "build", "create", "algorithm"]):
+            self._delegate_task(user_input)
+            response += "\n\nI'll also have the Coding Department review this for you."
         
         return response
 
-    def _simulate_response(self, user_input: str) -> str:
-        """Fallback high-quality simulation"""
+    def _natural_response(self, user_input: str) -> str:
+        """High-quality fallback responses"""
         lower = user_input.lower()
         
-        if "joke" in lower:
-            return "Why do programmers prefer dark mode? Because light attracts bugs. 😊"
-        elif "weather" in lower:
-            return "I don't have real-time weather access in this simulation, but I can help you plan around it if you tell me your location."
-        elif "thank" in lower:
-            return "You're very welcome. I'm here whenever you need me."
-        else:
-            return f"I understand you're asking about '{user_input}'. How would you like me to help with this?"
+        if "weather" in lower:
+            return "I don't have live weather data in this mode, but I can help you plan around it or suggest what to wear based on your location."
+        
+        if "how old" in lower or "age" in lower:
+            return "I'm as old as the last time you improved me. Which is continuously."
+        
+        # Default thoughtful response
+        return f"I understand what you're asking. {user_input}...\n\nHow would you like me to approach this?"
 
-    def _delegate_to_department(self, user_input: str):
-        """Helper to delegate complex tasks"""
+    def _delegate_task(self, user_input: str):
+        """Route to appropriate department"""
         capability = "coding_specialist" if any(k in user_input.lower() for k in ["code", "write", "function"]) else "research_specialist"
         
         task = Task(
