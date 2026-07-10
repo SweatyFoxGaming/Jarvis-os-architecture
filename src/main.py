@@ -10,6 +10,9 @@ if project_root not in sys.path:
 from src.v2_main import CognitiveEngineV3
 from src.gui import AmbientUI
 from PyQt6.QtWidgets import QApplication
+from config.secure_config import AppConfig
+from memory.secure_store import SecureMemoryStore
+from core.secure_runner import SecureCommandRunner
 
 def get_base_path():
     """ Get absolute path to base directory, works for dev and for PyInstaller """
