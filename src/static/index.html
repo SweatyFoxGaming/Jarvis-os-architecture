@@ -3,201 +3,599 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JARVIS - Supreme Sovereign</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>JARVIS V3 – Phoenix Intelligence Platform</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
-
-        :root {
-            --bg-color: #020408;
-            --panel-bg: rgba(10, 14, 20, 0.9);
-            --accent-cyan: #00f2ff;
-            --accent-magenta: #ff00ff;
-            --accent-gold: #ffcc00;
-            --glow-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+        /* ---------- Reset & Base ---------- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-
         body {
-            background-color: var(--bg-color);
-            color: #e6edf3;
-            font-family: 'JetBrains Mono', monospace;
-            background-image:
-                radial-gradient(circle at 50% 50%, rgba(0, 242, 255, 0.05) 0%, transparent 50%),
-                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
-                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            background-size: 100% 100%, 100% 2px, 3px 100%;
+            background: #0a0c10;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
-        .cyber-panel {
-            background: var(--panel-bg);
-            border: 1px solid rgba(0, 242, 255, 0.2);
-            backdrop-filter: blur(10px);
-            box-shadow: var(--glow-shadow);
+        /* ---------- Header ---------- */
+        .header {
+            background: #13171d;
+            padding: 16px 24px;
+            border-bottom: 1px solid #2a2f3a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            gap: 12px;
         }
-
-        .aura-ring {
-            border: 2px solid var(--accent-cyan);
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, #00b4d8, #0077b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header .right-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .header .status-badge {
+            background: #1e2a36;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #9aa9b9;
+            border: 1px solid #2a3a4a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header .status-badge .dot {
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            box-shadow: 0 0 20px var(--accent-cyan);
-            animation: aura-pulse 4s infinite ease-in-out;
+            display: inline-block;
+        }
+        .dot.online { background: #00e676; }
+        .dot.offline { background: #ff5252; }
+
+        .header .admin-link {
+            background: #1a73e8;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .header .admin-link:hover {
+            background: #2b7ff0;
         }
 
-        @keyframes aura-pulse {
-            0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; box-shadow: 0 0 15px var(--accent-cyan); border-color: var(--accent-cyan); }
-            33% { transform: scale(1.1) rotate(120deg); opacity: 1; box-shadow: 0 0 30px var(--accent-magenta); border-color: var(--accent-magenta); }
-            66% { transform: scale(1.05) rotate(240deg); opacity: 0.9; box-shadow: 0 0 25px var(--accent-gold); border-color: var(--accent-gold); }
+        /* ---------- Main Layout ---------- */
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
         }
 
-        .glitch-text { font-family: 'Orbitron', sans-serif; text-transform: uppercase; letter-spacing: 4px; }
+        /* ---------- Chat Panel ---------- */
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0d1117;
+            min-width: 0;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            scroll-behavior: smooth;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 12px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            animation: fadeIn 0.2s ease;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #1a73e8;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant {
+            align-self: flex-start;
+            background: #1e2a36;
+            color: #e8edf2;
+            border-bottom-left-radius: 4px;
+            border: 1px solid #2a3a4a;
+        }
+        .message .sender {
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0.7;
+            margin-bottom: 4px;
+        }
+        .message .timestamp {
+            font-size: 10px;
+            opacity: 0.5;
+            margin-top: 4px;
+            text-align: right;
+        }
+        .message .content {
+            white-space: pre-wrap;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 10px; }
+        /* ---------- Typing Indicator ---------- */
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: #1e2a36;
+            padding: 10px 16px;
+            border-radius: 20px;
+            border: 1px solid #2a3a4a;
+            font-size: 14px;
+            color: #9aa9b9;
+        }
+        .typing-indicator .dots::after {
+            content: '...';
+            animation: dots 1.2s steps(3, end) infinite;
+        }
+        @keyframes dots {
+            0% { content: ''; }
+            33% { content: '.'; }
+            66% { content: '..'; }
+            100% { content: '...'; }
+        }
+
+        /* ---------- Chat Input ---------- */
+        .chat-input-area {
+            padding: 16px 24px;
+            background: #13171d;
+            border-top: 1px solid #2a2f3a;
+            display: flex;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .chat-input-area input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 24px;
+            border: 1px solid #2a3a4a;
+            background: #0d1117;
+            color: #e0e0e0;
+            font-size: 15px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .chat-input-area input:focus {
+            border-color: #1a73e8;
+        }
+        .chat-input-area button {
+            padding: 12px 28px;
+            border-radius: 24px;
+            border: none;
+            background: #1a73e8;
+            color: white;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+            white-space: nowrap;
+        }
+        .chat-input-area button:hover {
+            background: #2b7ff0;
+        }
+        .chat-input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ---------- Status Panel ---------- */
+        .status-panel {
+            width: 280px;
+            background: #0d1117;
+            border-left: 1px solid #2a2f3a;
+            padding: 20px 16px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .status-panel h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #6a7a8a;
+            margin-bottom: 16px;
+        }
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #1a1f26;
+            font-size: 14px;
+        }
+        .status-item .label {
+            color: #9aa9b9;
+        }
+        .status-item .value {
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+        .status-item .value.online { color: #00e676; }
+        .status-item .value.offline { color: #ff5252; }
+
+        /* ---------- API Key Modal ---------- */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .modal {
+            background: #1e2a36;
+            padding: 32px 40px;
+            border-radius: 16px;
+            max-width: 420px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            border: 1px solid #2a3a4a;
+        }
+        .modal h2 {
+            margin-bottom: 12px;
+            font-weight: 500;
+            color: #e0e0e0;
+        }
+        .modal p {
+            color: #9aa9b9;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .modal input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #2a3a4a;
+            background: #0d1117;
+            color: #e0e0e0;
+            font-size: 14px;
+            margin-bottom: 16px;
+            outline: none;
+        }
+        .modal input:focus {
+            border-color: #1a73e8;
+        }
+        .modal button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: #1a73e8;
+            color: white;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .modal button:hover {
+            background: #2b7ff0;
+        }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 768px) {
+            .status-panel {
+                display: none;
+            }
+            .message {
+                max-width: 95%;
+            }
+            .header h1 {
+                font-size: 16px;
+            }
+        }
+        @media (max-width: 480px) {
+            .chat-input-area {
+                flex-wrap: wrap;
+            }
+            .chat-input-area input {
+                flex: 1 1 100%;
+            }
+            .chat-input-area button {
+                flex: 1;
+            }
+        }
     </style>
 </head>
-<body class="h-screen flex flex-col p-4 overflow-hidden">
-    <!-- Top HUD -->
-    <nav class="flex justify-between items-center mb-4 px-2">
-        <div class="flex items-center gap-6">
-            <div class="aura-ring"></div>
-            <div>
-                <h1 class="glitch-text text-2xl text-cyan-400 font-bold">JARVIS</h1>
-                <p class="text-[10px] text-gray-500 tracking-[0.3em]">SUPREME SOVEREIGN OVERSEER</p>
+<body>
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="apiKeyModal">
+    <div class="modal">
+        <h2>🔑 Enter API Key</h2>
+        <p>Your API key is stored locally in your browser session.</p>
+        <input type="password" id="apiKeyInput" placeholder="Paste your X-API-Key..." />
+        <button id="apiKeySubmit">Connect</button>
+        <p style="margin-top:12px; font-size:12px; color:#6a7a8a;">The key is never sent to any server except JARVIS.</p>
+    </div>
+</div>
+
+<!-- Header -->
+<header class="header">
+    <h1>⚡ JARVIS V3 · Phoenix OS</h1>
+    <div class="right-group">
+        <div class="status-badge">
+            <span class="dot online" id="statusDot"></span>
+            <span id="statusLabel">Connecting...</span>
+        </div>
+        <a href="/admin.html" class="admin-link">⚙️ Admin</a>
+    </div>
+</header>
+
+<!-- Main -->
+<div class="main">
+    <div class="chat-panel">
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="sender">JARVIS</div>
+                <div class="content">Hello. I am online. How can I assist you today?</div>
             </div>
         </div>
-        <div class="cyber-panel px-6 py-2 rounded-full flex gap-8 text-[11px] border-cyan-900/50">
-            <div class="flex flex-col"><span class="text-gray-500">CPU</span><span id="cpu-val" class="text-cyan-400">0%</span></div>
-            <div class="flex flex-col"><span class="text-gray-500">RAM</span><span id="ram-val" class="text-magenta-400">0MB</span></div>
-            <div class="flex flex-col"><span class="text-gray-500">SYSTEM</span><span class="text-green-400">STABLE</span></div>
+        <div class="typing-indicator" id="typingIndicator">
+            <span>JARVIS is typing</span>
+            <span class="dots"></span>
         </div>
-    </nav>
-
-    <div class="flex-1 flex gap-4 overflow-hidden">
-        <!-- Main Chat Area -->
-        <section class="flex-[3] flex flex-col cyber-panel rounded-xl overflow-hidden relative">
-            <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent"></div>
-
-            <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-6">
-                <div class="flex gap-4 items-start animate-fade-in">
-                    <div class="w-8 h-8 rounded bg-cyan-900 flex items-center justify-center text-[10px] text-cyan-400 border border-cyan-500">SYS</div>
-                    <div class="flex-1 text-sm leading-relaxed text-cyan-100">Neural link established. Awaiting directives.</div>
-                </div>
-            </div>
-
-            <div class="p-6 bg-black/40 border-t border-gray-800">
-                <div class="flex gap-4 bg-gray-900/50 p-2 rounded-lg border border-gray-700 focus-within:border-cyan-500 transition-all">
-                    <input id="chat-input" type="text" class="flex-1 bg-transparent border-none outline-none p-2 text-sm" placeholder="COMMAND JARVIS...">
-                    <button onclick="sendChat()" class="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 px-6 py-2 rounded font-bold text-xs border border-cyan-500/50 uppercase tracking-widest">SEND</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Sidebar Diagnostics -->
-        <aside class="flex-1 flex flex-col gap-4 overflow-hidden">
-            <div class="cyber-panel rounded-xl p-4 flex flex-col h-1/2">
-                <h3 class="text-[10px] font-bold text-gray-500 mb-4 tracking-widest">CORE KNOWLEDGE</h3>
-                <div id="knowledge-base" class="space-y-3 overflow-y-auto flex-1 pr-2">
-                    <!-- Dynamic -->
-                </div>
-            </div>
-            <div class="cyber-panel rounded-xl p-4 flex flex-col h-1/2 border-magenta-900/30">
-                <h3 class="text-[10px] font-bold text-gray-500 mb-4 tracking-widest">LOG TRACE</h3>
-                <div id="log-trace" class="text-[10px] space-y-1 text-gray-400 overflow-y-auto flex-1 font-mono">
-                    <div>[08:42] Kernel initializing...</div>
-                    <div>[08:42] Memory modules loaded.</div>
-                </div>
-            </div>
-        </aside>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Type a message..." />
+            <button id="sendBtn">Send</button>
+        </div>
     </div>
 
-    <script>
-        const container = document.getElementById('chat-container');
-        const input = document.getElementById('chat-input');
-        const logTrace = document.getElementById('log-trace');
+    <!-- Status Panel -->
+    <div class="status-panel" id="statusPanel">
+        <h3>🖥️ System Status</h3>
+        <div class="status-item"><span class="label">Engine</span><span class="value online" id="engineStatus">Online</span></div>
+        <div class="status-item"><span class="label">CPU</span><span class="value" id="cpuStatus">—</span></div>
+        <div class="status-item"><span class="label">RAM</span><span class="value" id="ramStatus">—</span></div>
+        <div class="status-item"><span class="label">Disk</span><span class="value" id="diskStatus">—</span></div>
+        <div class="status-item"><span class="label">API Key</span><span class="value" id="keyStatus">❌ Missing</span></div>
+    </div>
+</div>
 
-        function addLog(msg) {
-            const time = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit' });
-            const div = document.createElement('div');
-            div.innerHTML = `<span class="text-cyan-700">[${time}]</span> ${msg}`;
-            logTrace.appendChild(div);
-            logTrace.scrollTop = logTrace.scrollHeight;
+<script>
+    // ---------- DOM references ----------
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const apiKeyModal = document.getElementById('apiKeyModal');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const apiKeySubmit = document.getElementById('apiKeySubmit');
+    const statusDot = document.getElementById('statusDot');
+    const statusLabel = document.getElementById('statusLabel');
+
+    // ---------- State ----------
+    let apiKey = sessionStorage.getItem('jarvis_api_key') || null;
+    let isStreaming = false;
+
+    // ---------- Show/Hide modal ----------
+    function checkApiKey() {
+        if (!apiKey) {
+            apiKeyModal.style.display = 'flex';
+            return false;
+        } else {
+            apiKeyModal.style.display = 'none';
+            document.getElementById('keyStatus').textContent = '✅ Active';
+            document.getElementById('keyStatus').className = 'value online';
+            return true;
+        }
+    }
+
+    apiKeySubmit.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (key) {
+            apiKey = key;
+            sessionStorage.setItem('jarvis_api_key', key);
+            checkApiKey();
+            updateStatus(); // refresh health
+        }
+    });
+
+    // Allow Enter key in modal
+    apiKeyInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') apiKeySubmit.click();
+    });
+
+    // ---------- Chat functions ----------
+    function addMessage(content, sender = 'assistant', timestamp = null) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${sender}`;
+        const time = timestamp || new Date().toLocaleTimeString();
+        msgDiv.innerHTML = `
+            <div class="sender">${sender === 'user' ? 'You' : 'JARVIS'}</div>
+            <div class="content">${content}</div>
+            <div class="timestamp">${time}</div>
+        `;
+        chatMessages.appendChild(msgDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function setTyping(visible) {
+        typingIndicator.style.display = visible ? 'block' : 'none';
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // ---------- Send message ----------
+    async function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!text || isStreaming) return;
+        if (!apiKey) {
+            checkApiKey();
+            return;
         }
 
-        function createMessageElement(sender) {
-            const isUser = sender === 'YOU';
-            const div = document.createElement('div');
-            div.className = `flex gap-4 items-start ${isUser ? 'flex-row-reverse' : ''}`;
-            div.innerHTML = `
-                <div class="w-8 h-8 rounded ${isUser ? 'bg-gray-800 border-gray-600' : 'bg-cyan-900 border-cyan-500'} flex items-center justify-center text-[10px] text-gray-300 border">${sender.substring(0,3)}</div>
-                <div class="flex-1 text-sm leading-relaxed ${isUser ? 'text-right' : 'text-cyan-100'} p-1 content-box"></div>
-            `;
-            container.appendChild(div);
-            return div.querySelector('.content-box');
-        }
+        // Disable input
+        chatInput.value = '';
+        sendBtn.disabled = true;
+        isStreaming = true;
+        addMessage(text, 'user');
 
-        async function sendChat() {
-            const msg = input.value.trim();
-            if (!msg) return;
-            input.value = '';
+        // Typing indicator
+        setTyping(true);
 
-            const userContent = createMessageElement('YOU');
-            userContent.innerText = msg;
-            addLog(`Delegating: ${msg.substring(0, 20)}...`);
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey,
+                },
+                body: JSON.stringify({ message: text }),
+            });
 
-            const jarvisContent = createMessageElement('JARVIS');
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Server error (${response.status}): ${errText}`);
+            }
 
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg })
-                });
+            // SSE streaming
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let assistantMessage = '';
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = "";
+            // We'll create an assistant message element
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message assistant';
+            const senderDiv = document.createElement('div');
+            senderDiv.className = 'sender';
+            senderDiv.textContent = 'JARVIS';
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'content';
+            msgDiv.appendChild(senderDiv);
+            msgDiv.appendChild(contentDiv);
+            chatMessages.appendChild(msgDiv);
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    buffer += decoder.decode(value, {stream: true});
-                    const lines = buffer.split('\n\n');
-                    buffer = lines.pop();
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const token = line.substring(6);
-                            if (token === "[DONE]") break;
-                            // Sanitize token before insertion
-                            const span = document.createElement('span');
-                            span.innerText = token;
-                            jarvisContent.appendChild(span);
-                            container.scrollTop = container.scrollHeight;
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                // Process SSE events: lines starting with "data: "
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const payload = line.slice(6).trim();
+                        if (payload === '[DONE]') {
+                            // Stream finished
+                            break;
+                        }
+                        if (payload) {
+                            // Append to the message content
+                            assistantMessage += payload;
+                            contentDiv.textContent = assistantMessage;
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
                         }
                     }
                 }
-                addLog("Response finalized.");
-            } catch (err) {
-                jarvisContent.innerText = "CRITICAL ERROR: Communication lost.";
-                addLog("Link error detected.");
             }
-        }
 
-        async function updateHUD() {
-            try {
-                const res = await fetch('/api/status');
-                const data = await res.json();
-                document.getElementById('cpu-val').innerText = `${data.cpu}%`;
-                document.getElementById('ram-val').innerText = `${data.ram_available}MB`;
-            } catch {}
-        }
+            // Final scroll
+            chatMessages.scrollTop = chatMessages.scrollHeight;
 
-        input.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChat(); });
-        setInterval(updateHUD, 3000);
-        updateHUD();
-    </script>
+        } catch (err) {
+            console.error('Chat error:', err);
+            addMessage(`⚠️ Error: ${err.message}`, 'assistant');
+        } finally {
+            setTyping(false);
+            sendBtn.disabled = false;
+            isStreaming = false;
+            chatInput.focus();
+        }
+    }
+
+    // ---------- Event listeners ----------
+    sendBtn.addEventListener('click', sendMessage);
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    // ---------- Status update (health + system) ----------
+    async function updateStatus() {
+        try {
+            // Health check (public)
+            const healthRes = await fetch('/health');
+            if (healthRes.ok) {
+                const data = await healthRes.json();
+                const dot = document.getElementById('statusDot');
+                const label = document.getElementById('statusLabel');
+                if (data.engine_ready) {
+                    dot.className = 'dot online';
+                    label.textContent = 'Online';
+                    document.getElementById('engineStatus').textContent = 'Online';
+                    document.getElementById('engineStatus').className = 'value online';
+                } else {
+                    dot.className = 'dot offline';
+                    label.textContent = 'Engine Offline';
+                    document.getElementById('engineStatus').textContent = 'Offline';
+                    document.getElementById('engineStatus').className = 'value offline';
+                }
+            } else {
+                document.getElementById('statusDot').className = 'dot offline';
+                document.getElementById('statusLabel').textContent = 'API Unreachable';
+                document.getElementById('engineStatus').textContent = 'Unreachable';
+                document.getElementById('engineStatus').className = 'value offline';
+            }
+
+            // System status (authenticated)
+            if (apiKey) {
+                const sysRes = await fetch('/api/status', {
+                    headers: { 'X-API-Key': apiKey }
+                });
+                if (sysRes.ok) {
+                    const data = await sysRes.json();
+                    document.getElementById('cpuStatus').textContent = data.cpu + '%';
+                    document.getElementById('ramStatus').textContent = data.ram_available_mb + ' MB free';
+                    document.getElementById('diskStatus').textContent = data.disk + '% used';
+                }
+            }
+        } catch (e) {
+            console.warn('Status update failed:', e);
+        }
+    }
+
+    // ---------- Initialise ----------
+    checkApiKey();
+    updateStatus();
+    setInterval(updateStatus, 5000); // poll every 5s
+
+    // Focus input
+    chatInput.focus();
+</script>
 </body>
 </html>

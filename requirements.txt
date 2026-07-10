@@ -12,3 +12,6 @@ uvicorn>=0.23.0
 pydantic
 pyaudio
 huggingface_hub
+sentence-transformers>=2.2.0
+pgvector>=0.2.0  
+# optional, only if using PostgreSQL with pgvector

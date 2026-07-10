@@ -1,45 +1,44 @@
+import re
+import json
 import logging
 import traceback
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# Your existing interfaces and models
 from src.core.interfaces import ICEO, IChiefOfStaff, IEventBus
 from src.core.models import ExecutiveDecision, Goal, Task, Priority, Event, TaskStatus
 from src.core.digital_twin import DigitalTwin
 from src.executive.board import ExecutiveBoard
 from src.templates import PromptTemplate
+from src.core.tools import ToolRegistry
 
-# Legacy memory (kept for backward compatibility)
-from src.memory.tiered_memory import HierarchicalMemory
-
-# Secure components (will be injected)
 try:
     from memory.secure_store import SecureMemoryStore
 except ImportError:
     SecureMemoryStore = None
-
 try:
     from core.secure_runner import SecureCommandRunner
 except ImportError:
     SecureCommandRunner = None
 
-# Logger
+from src.memory.tiered_memory import HierarchicalMemory
+
 logger = logging.getLogger(__name__)
+
+SEMANTIC_SEARCH_ENABLED = os.getenv("SEMANTIC_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
+SEMANTIC_SEARCH_LIMIT = int(os.getenv("SEMANTIC_SEARCH_LIMIT", "5"))
+MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
 
 
 class ExecutiveMind(ICEO):
-    """
-    JARVIS Executive Mind - Natural conversation + Memory
-    Now reinforced with secure SQLite memory, logging, and error handling.
-    """
-
     def __init__(
         self,
         chief_of_staff: IChiefOfStaff,
         event_bus: IEventBus,
         digital_twin: DigitalTwin,
         engine=None,
+        tool_registry: Optional[ToolRegistry] = None,
         secure_memory: Optional[SecureMemoryStore] = None,
         secure_runner: Optional[SecureCommandRunner] = None,
     ):
@@ -47,86 +46,82 @@ class ExecutiveMind(ICEO):
         self.event_bus = event_bus
         self.twin = digital_twin
         self.board = ExecutiveBoard()
-
-        # Engine (if available)
         self.engine = engine
-
-        # Secure components (injected or None)
+        self.tool_registry = tool_registry
         self._secure_memory = secure_memory
         self._secure_runner = secure_runner
-
-        # Legacy memory (fallback if secure memory is not available)
         self.memory = HierarchicalMemory() if secure_memory is None else None
-
         self.active_goals: List[Goal] = []
+        self._embedding_available = False
 
-        logger.info(
-            f"[ExecutiveMind] Initialized. SecureMemory: {secure_memory is not None}, "
-            f"Engine: {engine is not None and getattr(engine, 'llm', None) is not None}"
-        )
+        if self._secure_memory and hasattr(self._secure_memory, 'search_semantic'):
+            self._embedding_available = True
+            logger.info("[ExecutiveMind] Semantic search available.")
+        else:
+            logger.warning("[ExecutiveMind] Semantic search not available; falling back to keyword.")
 
-    # ---------- Dependency Injection Setters (called by v2_main) ----------
+        logger.info(f"[ExecutiveMind] Initialized. SecureMemory: {secure_memory is not None}, "
+                    f"Engine: {engine is not None and getattr(engine, 'llm', None) is not None}, "
+                    f"ToolRegistry: {tool_registry is not None}, "
+                    f"Semantic Search: {self._embedding_available}")
+
+    # ---------- Dependency Injection ----------
     def set_secure_memory(self, secure_memory: SecureMemoryStore):
-        """Inject secure memory after construction."""
         self._secure_memory = secure_memory
-        # If we were using fallback memory, we can now switch to secure
-        if self.memory is not None and secure_memory is not None:
-            logger.info("[ExecutiveMind] Switching from legacy memory to secure memory.")
-            self.memory = None  # Stop using legacy
+        self._embedding_available = hasattr(secure_memory, 'search_semantic')
+        if self.memory is not None:
+            self.memory = None
         logger.info("[ExecutiveMind] SecureMemoryStore attached.")
 
     def set_secure_runner(self, secure_runner: SecureCommandRunner):
-        """Inject secure command runner after construction."""
         self._secure_runner = secure_runner
         logger.info("[ExecutiveMind] SecureCommandRunner attached.")
 
     def set_engine(self, engine):
-        """Set the LLM engine (if not provided at init)."""
         self.engine = engine
         logger.info("[ExecutiveMind] Engine attached.")
 
-    # ---------- Memory Helpers ----------
-    def _get_recent_context(self, limit: int = 5) -> str:
-        """
-        Retrieve recent conversation history from secure memory.
-        Falls back to legacy HierarchicalMemory if secure memory is not available.
-        """
-        if self._secure_memory is not None:
-            try:
-                # Search for conversation entries (type = "conversation")
-                # We'll store conversations with metadata {"type": "conversation"}
-                results = self._secure_memory.search_by_text("", limit=limit * 2)  # We'll filter later
-                # Filter those with metadata.type == "conversation"
-                convs = []
-                for rec in results:
-                    meta = rec.get("metadata", {})
-                    if meta.get("type") == "conversation":
-                        convs.append(rec)
-                # Build context string from most recent
-                context_lines = []
-                for rec in convs[-limit:]:  # last 'limit' conversations
-                    text = rec.get("text", "")
-                    # text format: "CONVERSATION: user: ... | assistant: ..."
-                    context_lines.append(text)
-                if context_lines:
-                    return "\n".join(context_lines)
-                else:
-                    return "No recent conversation history."
-            except Exception as e:
-                logger.warning(f"[ExecutiveMind] Failed to retrieve recent context from secure memory: {e}")
-                # Fall through to legacy memory
-        # Legacy fallback
-        if self.memory is not None:
-            try:
-                return self.memory.get_recent_context()
-            except Exception as e:
-                logger.warning(f"[ExecutiveMind] Failed to retrieve context from legacy memory: {e}")
-        return "No recent context available."
+    def set_tool_registry(self, tool_registry: ToolRegistry):
+        self.tool_registry = tool_registry
+        logger.info("[ExecutiveMind] ToolRegistry attached.")
 
-    def _store_conversation(self, user_input: str, response: str):
-        """Store the conversation turn in secure memory (and legacy if present)."""
-        timestamp = datetime.now().isoformat()
-        # Store in secure memory
+    # ---------- Memory Helpers with user_id ----------
+    def _get_recent_context(self, query: str = "", limit: int = 5, user_id: str = "default") -> str:
+        if not self._secure_memory:
+            if self.memory is not None:
+                return self.memory.get_recent_context()
+            return "No recent conversation history."
+
+        if SEMANTIC_SEARCH_ENABLED and self._embedding_available and query:
+            try:
+                results = self._secure_memory.search_semantic(query, limit=SEMANTIC_SEARCH_LIMIT, user_id=user_id)
+                if results:
+                    context_lines = ["Relevant past conversations:"]
+                    for r in results:
+                        text = r.get("text", "")
+                        if text.startswith("CONVERSATION: "):
+                            text = text[13:]
+                        context_lines.append(f"- {text}")
+                    return "\n".join(context_lines)
+            except Exception as e:
+                logger.warning(f"Semantic search failed: {e}. Falling back to recent.")
+
+        try:
+            results = self._secure_memory.search_by_text("", limit=limit, user_id=user_id)
+            if results:
+                context_lines = ["Recent conversation:"]
+                for r in results:
+                    text = r.get("text", "")
+                    if text.startswith("CONVERSATION: "):
+                        text = text[13:]
+                    context_lines.append(f"- {text}")
+                return "\n".join(context_lines)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve recent context: {e}")
+
+        return "No recent conversation history."
+
+    def _store_conversation(self, user_input: str, response: str, user_id: str = "default"):
         if self._secure_memory is not None:
             try:
                 self._secure_memory.insert(
@@ -135,91 +130,151 @@ class ExecutiveMind(ICEO):
                         "type": "conversation",
                         "user_input": user_input,
                         "response_preview": response[:200],
-                        "timestamp": timestamp,
+                        "timestamp": datetime.now().isoformat(),
                     },
+                    user_id=user_id,
                 )
                 logger.debug("[ExecutiveMind] Stored conversation in secure memory.")
             except Exception as e:
-                logger.warning(f"[ExecutiveMind] Failed to store conversation in secure memory: {e}")
-        # Also store in legacy memory if present
+                logger.warning(f"Failed to store in secure memory: {e}")
         if self.memory is not None:
             try:
                 self.memory.store_conversation(user_input, response)
             except Exception as e:
-                logger.warning(f"[ExecutiveMind] Failed to store conversation in legacy memory: {e}")
+                logger.warning(f"Failed to store in legacy memory: {e}")
 
-    # ---------- Main Request Processing ----------
-    def process_request(self, user_input: str) -> str:
-        """
-        Process a user request, generate a response, and store in memory.
-        """
-        logger.info(f"[ExecutiveMind] Processing: {user_input[:80]}...")
+    # ---------- Tool Call Parsing ----------
+    def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
+        pattern = r'<tool_call\s+name="([^"]+)"\s+params=\'([^\']*)\'\s*/>'
+        matches = re.findall(pattern, response)
+        tool_calls = []
+        for name, params_str in matches:
+            try:
+                params = json.loads(params_str) if params_str else {}
+                tool_calls.append({"name": name, "params": params})
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse tool params: {params_str}")
+        return tool_calls
+
+    def _execute_tools(self, tool_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
+        if not self.tool_registry:
+            return {"error": "Tool registry not initialized"}
+        results = {}
+        for call in tool_calls:
+            tool_name = call.get("name")
+            params = call.get("params", {})
+            result = self.tool_registry.execute_tool(tool_name, params)
+            results[tool_name] = result
+        return results
+
+    # ---------- ReAct Loop ----------
+    def _build_react_prompt(self, messages: List[Dict[str, str]], tools_desc: str) -> str:
+        system_prompt = PromptTemplate.get_system_prompt()
+        lines = [system_prompt]
+        if tools_desc:
+            lines.append("\n" + tools_desc)
+            lines.append("\nIMPORTANT:")
+            lines.append('- To use a tool, respond with:')
+            lines.append('  <tool_call name="tool_name" params=\'{"param1": "value1"}\' />')
+            lines.append("- You can use multiple tool calls in one response.")
+            lines.append("- After receiving tool results, decide if you need more tools or can finalize.")
+            lines.append("- To finalize, respond without a tool call.")
+        lines.append("")
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                lines.append(f"User: {content}")
+            elif role == "assistant":
+                lines.append(f"JARVIS: {content}")
+            elif role == "tool_result":
+                lines.append(f"Tool result: {content}")
+            elif role == "system":
+                lines.append(f"System: {content}")
+            else:
+                lines.append(f"{role}: {content}")
+        lines.append("\nJARVIS:")
+        return "\n".join(lines)
+
+    def process_request(self, user_input: str, user_id: str = "default") -> str:
+        logger.info(f"[ExecutiveMind] Processing for user {user_id}: {user_input[:80]}...")
         response = ""
 
         try:
             lower = user_input.lower().strip()
-
-            # ---------- 1. Fast Path: Direct commands ----------
+            # Fast Path: Direct commands (skip LLM)
             if any(g in lower for g in ["hello", "hi", "hey"]):
                 response = "Hello! Good to see you again. What can I do for you?"
-            elif "how are you" in lower or "status" in lower:
+                self._store_conversation(user_input, response, user_id)
+                return response
+            if "how are you" in lower or "status" in lower:
                 response = "I'm doing well, thanks for asking. Ready to help."
-            elif "time" in lower:
-                response = f"The current time is {datetime.now().strftime('%I:%M %p')}."
-            else:
-                # ---------- 2. LLM Path (if available) ----------
-                if self.engine is not None and getattr(self.engine, 'llm', None) is not None:
-                    # Build context from secure memory
-                    context = self._get_recent_context()
-                    formatted_prompt = PromptTemplate.format(user_input, context)
+                self._store_conversation(user_input, response, user_id)
+                return response
+            if "time" in lower and len(user_input.split()) < 5:
+                from datetime import datetime as dt
+                response = f"The current time is {dt.now().strftime('%I:%M %p')}."
+                self._store_conversation(user_input, response, user_id)
+                return response
 
-                    logger.debug(f"[ExecutiveMind] Generating LLM response for: {user_input[:50]}...")
-                    response = self.engine.generate(
-                        formatted_prompt,
-                        max_tokens=512,
-                        temperature=0.7,
-                        stream=False,
-                    )
-                    # Check for error in response
-                    if response.startswith("[ERROR]") or "failed" in response.lower():
-                        logger.warning(f"[ExecutiveMind] LLM returned error: {response}")
-                        # Use a fallback response
-                        response = (
-                            f"I encountered an issue processing your request. "
-                            f"Please try again later or phrase your question differently."
-                        )
-                else:
-                    # ---------- 3. No LLM: Use template ----------
-                    logger.info("[ExecutiveMind] No LLM available, using template response.")
-                    context = self._get_recent_context()
-                    response = PromptTemplate.format(user_input, context)
+            # Main path: LLM with ReAct
+            if self.engine is not None and getattr(self.engine, 'llm', None) is not None:
+                context = self._get_recent_context(query=user_input, user_id=user_id)
+                tools_desc = self.tool_registry.list_tools_for_prompt() if self.tool_registry else ""
+
+                messages = [{"role": "user", "content": user_input}]
+                if context and context != "No recent conversation history.":
+                    messages.insert(0, {"role": "system", "content": f"Context:\n{context}"})
+
+                final_answer = None
+                raw_response = ""
+                for iteration in range(1, MAX_TOOL_ITERATIONS + 1):
+                    logger.debug(f"[ExecutiveMind] ReAct iteration {iteration}/{MAX_TOOL_ITERATIONS}")
+                    prompt = self._build_react_prompt(messages, tools_desc)
+                    raw_response = self.engine.generate(prompt, max_tokens=1024, temperature=0.7)
+
+                    tool_calls = self._parse_tool_calls(raw_response)
+                    if not tool_calls:
+                        final_answer = raw_response
+                        break
+
+                    logger.info(f"Iteration {iteration}: executing {len(tool_calls)} tool calls.")
+                    tool_results = self._execute_tools(tool_calls)
+                    messages.append({"role": "assistant", "content": raw_response})
+                    for tool_name, result in tool_results.items():
+                        result_text = json.dumps(result, indent=2) if isinstance(result, dict) else str(result)
+                        messages.append({
+                            "role": "tool_result",
+                            "content": f"Tool '{tool_name}' returned:\n{result_text}"
+                        })
+
+                if final_answer is None:
+                    final_answer = raw_response if raw_response else "I'm sorry, I couldn't complete the task within the allowed steps."
+
+                response = final_answer
+            else:
+                logger.info("[ExecutiveMind] No LLM available, using template.")
+                context = self._get_recent_context(query=user_input, user_id=user_id)
+                response = PromptTemplate.format(user_input, context)
 
         except Exception as e:
             error_trace = traceback.format_exc()
-            logger.error(f"[ExecutiveMind] Unexpected error: {e}\n{error_trace}")
-            response = (
-                f"I'm sorry, an unexpected error occurred while processing your request. "
-                f"Please check the logs for details."
-            )
+            logger.error(f"Unexpected error: {e}\n{error_trace}")
+            response = "I'm sorry, an unexpected error occurred. Please check the logs."
 
-        # ---------- 4. Store conversation in memory ----------
-        self._store_conversation(user_input, response)
-
+        self._store_conversation(user_input, response, user_id)
         return response
 
-    # ---------- Other ICEO methods (placeholder) ----------
     def assess_vision(self):
-        """Placeholder for future implementation."""
-        logger.debug("[ExecutiveMind] assess_vision called (not implemented).")
-        pass
+        logger.debug("assess_vision called (not implemented).")
+        return "Executive Mind is operational."
 
-    # ---------- Shutdown ----------
     def shutdown(self):
-        """Clean up resources if needed."""
         logger.info("[ExecutiveMind] Shutting down.")
-        # No explicit cleanup needed for secure memory, but we can close it if needed.
         if self._secure_memory and hasattr(self._secure_memory, 'close'):
             try:
                 self._secure_memory.close()
             except Exception as e:
-                logger.warning(f"[ExecutiveMind] Error closing secure memory: {e}")
+                logger.warning(f"Error closing secure memory: {e}")
+        self._secure_memory = None
+        self._secure_runner = None
