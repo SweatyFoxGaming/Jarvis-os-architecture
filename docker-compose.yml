@@ -62,4 +62,8 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - /mnt/jarvis_home/models:/app/models
+      - /mnt/jarvis_home/data:/app/data
+      - /mnt/jarvis_home/logs:/app/logs
+      - /home/ubuntu/.ssh:/root/.ssh:ro 
     restart: unless-stopped
