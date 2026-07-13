@@ -1,10 +1,7 @@
-"""
-Tool Registry – Exposes departments as callable tools for the LLM.
-"""
-
+# src/core/tools.py
 import json
-import logging
 import time
+import logging
 from typing import Dict, Any, List, Callable, Optional
 from pydantic import BaseModel, Field
 
@@ -47,21 +44,18 @@ class ToolRegistry:
 
     def set_event_bus(self, event_bus):
         self._event_bus = event_bus
-        # Subscribe to task completion events
         if event_bus:
             event_bus.subscribe("TaskCompleted", self._on_task_completed)
             event_bus.subscribe("TaskFailed", self._on_task_failed)
         logger.info("[ToolRegistry] EventBus attached.")
 
     def _on_task_completed(self, event):
-        """Handle task completion events."""
         task_id = event.payload.get("task_id")
         if task_id:
             self._task_results[task_id] = {"status": "completed", "data": event.payload.get("output_data", {})}
             logger.debug(f"[ToolRegistry] Task {task_id} completed.")
 
     def _on_task_failed(self, event):
-        """Handle task failure events."""
         task_id = event.payload.get("task_id")
         if task_id:
             self._task_results[task_id] = {"status": "failed", "error": event.payload.get("reason", "Unknown error")}
@@ -96,31 +90,22 @@ class ToolRegistry:
         ]
 
     def list_tools_for_prompt(self) -> str:
-        """Generate a description of available tools for the LLM prompt."""
+        """Generate a compact tool description list for the LLM prompt."""
         if not self._tools:
             return "No tools available."
 
-        lines = ["You have access to the following tools:"]
+        lines = ["Tools (use only if needed):"]
         for tool in self._tools.values():
-            lines.append(f"\n  - **{tool.name}**: {tool.description}")
-            if tool.parameters:
-                lines.append("    Parameters:")
-                for p in tool.parameters:
-                    required = "(required)" if p.required else "(optional)"
-                    enum_text = f" Allowed: {', '.join(p.enum)}" if p.enum else ""
-                    lines.append(f"      - {p.name} ({p.type}) {required}: {p.description}{enum_text}")
+            # Short description – first sentence only
+            desc = tool.description.split('.')[0] if tool.description else ""
+            lines.append(f"- {tool.name}: {desc}")
         return "\n".join(lines)
 
     def execute_tool(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute a tool and wait for the result.
-        Returns dict with 'success' and 'result' or 'error'.
-        """
         tool = self.get_tool(tool_name)
         if tool is None:
             return {"success": False, "error": f"Tool '{tool_name}' not found"}
 
-        # If tool has a direct handler, use it
         if tool.handler:
             try:
                 result = tool.handler(**params)
@@ -129,12 +114,9 @@ class ToolRegistry:
                 logger.error(f"[ToolRegistry] Tool '{tool_name}' handler failed: {e}")
                 return {"success": False, "error": str(e)}
 
-        # Otherwise, delegate to department via Chief of Staff
         if self._chief_of_staff and tool.department:
             try:
                 from src.core.models import Task, Priority
-
-                # Create a task
                 task = Task(
                     creator_id="ToolRegistry",
                     target_capability=tool_name,
@@ -144,9 +126,7 @@ class ToolRegistry:
                 self._chief_of_staff.schedule_task(task)
                 task_id = str(task.uuid)
                 logger.info(f"[ToolRegistry] Scheduled task {task_id} for tool '{tool_name}'")
-
-                # Wait for task completion (with timeout)
-                timeout = 60  # seconds
+                timeout = 60
                 start_time = time.time()
                 while time.time() - start_time < timeout:
                     if task_id in self._task_results:
@@ -155,15 +135,11 @@ class ToolRegistry:
                             return {"success": True, "result": result.get("data", {})}
                         else:
                             return {"success": False, "error": result.get("error", "Task failed")}
-                    # Check if task is still active
                     if task_id in self._chief_of_staff.active_tasks:
                         time.sleep(0.5)
                         continue
-                    # Task is no longer active but not completed
                     break
-
                 return {"success": False, "error": f"Task {task_id} timed out after {timeout}s"}
-
             except Exception as e:
                 logger.error(f"[ToolRegistry] Tool '{tool_name}' scheduling failed: {e}")
                 return {"success": False, "error": str(e)}

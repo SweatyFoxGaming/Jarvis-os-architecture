@@ -1,7 +1,4 @@
-"""
-Secure Memory Store – PostgreSQL (production) with SQLite fallback.
-Supports user isolation via `user_id` column.
-"""
+# memory/secure_store.py (idempotent close)
 
 import os
 import json
@@ -44,19 +41,14 @@ logger = logging.getLogger(__name__)
 
 
 class SecureMemoryStore:
-    """
-    Dual‑backend memory store with PostgreSQL as primary.
-    Supports user isolation via `user_id` column.
-    """
-
     def __init__(self, db_path: str = "data/memory.db", use_postgres: Optional[bool] = None, embed_model: str = "all-MiniLM-L6-v2"):
         self.db_path = db_path
         self._use_postgres = self._determine_backend(use_postgres)
         self._embed_model = None
         self._connection_pool = None
         self._sqlite_conn = None
+        self._closed = False  # <-- ADDED
 
-        # Load embedding model (if available)
         if EMBEDDING_AVAILABLE:
             try:
                 self._embed_model = SentenceTransformer(embed_model)
@@ -133,7 +125,6 @@ class SecureMemoryStore:
                             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         );
                     """)
-                # Add column if not exists (for migrations)
                 try:
                     cur.execute("ALTER TABLE memory ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT 'default';")
                 except Exception:
@@ -184,7 +175,7 @@ class SecureMemoryStore:
                 raise
         raise RuntimeError(f"PostgreSQL query failed after {retries} retries.")
 
-    # ---------- SQLite Fallback ----------
+    # ---------- SQLite ----------
     def _init_sqlite(self):
         try:
             os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
@@ -266,7 +257,7 @@ class SecureMemoryStore:
         dot = sum(x*y for x,y in zip(a,b))
         return max(0.0, min(1.0, dot))
 
-    # ---------- Public API with user_id ----------
+    # ---------- Public API (with user_id) ----------
     def insert(self, text: str, metadata: Optional[Dict] = None, user_id: str = "default") -> int:
         if metadata is None:
             metadata = {}
@@ -445,14 +436,27 @@ class SecureMemoryStore:
                 for row in rows
             ]
 
+    # ---------- Close (idempotent) ----------
     def close(self):
+        if self._closed:
+            return
+
         if self._use_postgres and self._connection_pool:
-            self._connection_pool.closeall()
-            logger.info("[SecureMemoryStore] PostgreSQL connection pool closed.")
+            try:
+                self._connection_pool.closeall()
+                logger.info("[SecureMemoryStore] PostgreSQL connection pool closed.")
+            except Exception as e:
+                logger.warning(f"[SecureMemoryStore] Error closing pool: {e}")
         elif self._sqlite_conn:
-            self._sqlite_conn.close()
-            logger.info("[SecureMemoryStore] SQLite connection closed.")
+            try:
+                self._sqlite_conn.close()
+                logger.info("[SecureMemoryStore] SQLite connection closed.")
+            except Exception as e:
+                logger.warning(f"[SecureMemoryStore] Error closing SQLite: {e}")
+
+        self._closed = True
+        self._connection_pool = None
+        self._sqlite_conn = None
 
     def __del__(self):
         self.close()
-

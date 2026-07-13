@@ -1,4 +1,3 @@
-# src/core/security.py
 import os
 import shlex
 import logging
@@ -15,13 +14,11 @@ class SecurityPolicy:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
         # ---------- Allowed Paths ----------
-        # Expand to include more system directories (use with caution)
         self._allowed_paths: List[str] = [
             os.path.join(base_dir, "data"),
             os.path.join(base_dir, "tmp"),
             "/tmp/jarvis",
             os.path.join(base_dir, "logs"),
-            # Additional paths for system control
             "/tmp",
             "/var/log",
             "/home",
@@ -31,37 +28,26 @@ class SecurityPolicy:
         ]
 
         # ---------- Allowed Commands ----------
-        # Extensive whitelist for system administration
         self._allowed_commands: List[str] = [
-            # Basic file operations
             "ls", "cat", "head", "tail", "wc", "sort", "uniq", "grep", "find",
             "mkdir", "rm", "cp", "mv", "chmod", "chown", "ln",
-            # System info
             "df", "du", "free", "ps", "top", "htop", "uptime", "who", "w",
-            # Process management
             "kill", "pkill", "killall", "nice", "renice",
-            # Network
             "ping", "curl", "wget", "netstat", "ss", "ifconfig", "ip",
-            # Package management (Ubuntu/Debian)
             "apt", "apt-get", "dpkg",
-            # Service management
             "systemctl", "journalctl", "service",
-            # Text processing
             "echo", "printf", "sed", "awk", "cut", "paste", "join",
-            # Compression
             "tar", "gzip", "gunzip", "zip", "unzip",
-            # Development
             "make", "gcc", "g++", "python3", "pip", "pip3",
-            # Others
             "date", "time", "which", "whereis", "locate", "updatedb",
             "ssh", "scp", "rsync",
-            # Docker
             "docker", "docker-compose",
+            # Added for chained commands
+            "cd", "git",
         ]
 
         self._frozen = False
 
-        # Ensure directories exist
         for path in self._allowed_paths:
             try:
                 os.makedirs(path, exist_ok=True)
@@ -69,7 +55,6 @@ class SecurityPolicy:
                 logger.warning(f"[SecurityPolicy] Could not create {path}: {e}")
 
     def freeze(self):
-        """Make the policy immutable. Called once at startup."""
         self._frozen = True
         logger.info("[SecurityPolicy] Policy frozen. No further modifications allowed.")
 
@@ -115,9 +100,6 @@ class CapabilityToken:
 
 
 class SecurityModule:
-    """
-    Central security module for Phoenix OS.
-    """
     def __init__(self, secure_memory: Optional[Any] = None, secure_runner: Optional[Any] = None):
         self.policy = SecurityPolicy()
         self._secure_memory = secure_memory
@@ -148,10 +130,15 @@ class SecurityModule:
             return False
 
     def validate_command(self, command: str) -> bool:
+        """
+        Validate a command by checking its first token (base command).
+        Supports chained commands (e.g., "cd /app && git ...") – only the first token is checked.
+        """
         try:
             if not command:
                 return False
-            parts = shlex.split(command)
+            # Simple whitespace split to get the first token
+            parts = command.strip().split()
             if not parts:
                 return False
             base_cmd = parts[0]

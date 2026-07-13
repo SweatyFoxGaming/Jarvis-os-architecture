@@ -1,3 +1,4 @@
+from typing import List, Dict, Optional, Any
 """
 User Management – handles user registration, authentication, and API key management.
 """
