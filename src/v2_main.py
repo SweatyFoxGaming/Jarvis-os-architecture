@@ -124,12 +124,14 @@ class CognitiveEngineV3:
         self.model_manager = ModelManager(settings)
         self.engine = LLMEngine()
 
+        # ---------- Create ChiefOfStaff first (without tool_registry) ----------
         self.cos = ChiefOfStaff(
             self.event_bus,
             self.cap_registry,
             self.dept_registry,
             secure_memory=self.secure_memory,
             secure_runner=self.secure_runner,
+            tool_registry=None,
         )
 
         # ---------- Tool Registry (Capability Registry) ----------
@@ -139,8 +141,9 @@ class CognitiveEngineV3:
             dept_registry=self.dept_registry,
         )
         self.tool_registry.set_event_bus(self.event_bus)
+        self.cos.set_tool_registry(self.tool_registry)
 
-        # ---------- Register All Capabilities (hardcoded) ----------
+        # ---------- Register All Capabilities ----------
         self._register_existing_capabilities()
         self._register_calendar_tool()
         self._register_email_tool()
@@ -160,7 +163,6 @@ class CognitiveEngineV3:
         self.resolver = CapabilityResolver(self.capability_registry)
         self.execution_engine = CapabilityExecutionEngine(self.capability_registry, self.event_bus.publish)
 
-        # Discover and register built‑in capabilities
         manifests = self.builtin_provider.discover()
         for manifest in manifests:
             impl = self.builtin_provider.load(manifest)
@@ -200,17 +202,13 @@ class CognitiveEngineV3:
 
         # ---------- Executive Mind ----------
         self.mind = ExecutiveMind(
-            self.cos,
-            self.event_bus,
-            self.twin,
+            chief_of_staff=self.cos,
+            event_bus=self.event_bus,
+            digital_twin=self.twin,
             engine=self.engine,
             tool_registry=self.tool_registry,
             secure_memory=self.secure_memory,
             secure_runner=self.secure_runner,
-            cap_registry=self.cap_registry,
-            cognitive_workspace=self.workspace,
-            cognitive_assistant=self.assistant,
-            recall_engine=self.recall_engine,
         )
 
         # Departments
@@ -238,12 +236,12 @@ class CognitiveEngineV3:
 
         self._setup()
 
-        # ---------- Start Sleep Scheduler ----------
         if self.sleep_scheduler:
             asyncio.create_task(self.sleep_scheduler.start())
             logging.info("[V2] Sleep scheduler started.")
 
-    # ---------- Registration Helpers ----------
+    # ---------- Registration Methods with Updated Handlers ----------
+
     def _register_existing_capabilities(self):
         # Research
         research_cap = CapabilityDefinition(
@@ -288,8 +286,9 @@ class CognitiveEngineV3:
         self.tool_registry.register(sysinfo_cap)
 
         # Weather
-        def get_weather(params: dict) -> dict:
-            city = params.get("city", "London")
+        def get_weather(**kwargs):
+            # Accept various parameter names
+            city = kwargs.get('city') or kwargs.get('location') or "London"
             try:
                 url = f"https://wttr.in/{city}?format=%C+%t&lang=en"
                 response = requests.get(url, timeout=10)
@@ -314,7 +313,11 @@ class CognitiveEngineV3:
         security_module = SecurityModule(secure_memory=self.secure_memory)
         synapse = SynapseInterface(security_module, secure_memory=self.secure_memory)
 
-        def system_control_handler(action=None, command=None, path=None, content=None, **kwargs):
+        def system_control_handler(**kwargs):
+            action = kwargs.get('action')
+            command = kwargs.get('command')
+            path = kwargs.get('path')
+            content = kwargs.get('content')
             if action == "execute":
                 if not command:
                     return {"error": "Missing 'command' parameter"}
@@ -367,24 +370,24 @@ class CognitiveEngineV3:
             with open(CALENDAR_FILE, 'w') as f:
                 json.dump(events, f, indent=2)
 
-        def calendar_handler(params: dict) -> dict:
-            action = params.get("action")
+        def calendar_handler(**kwargs):
+            action = kwargs.get('action')
             if action == "list_events":
                 events = _load_calendar()
                 return {"events": events}
             elif action == "add_event":
-                title = params.get("title")
+                title = kwargs.get('title')
                 if not title:
                     return {"error": "Missing 'title'"}
-                date = params.get("date", datetime.now().isoformat())
-                description = params.get("description", "")
+                date = kwargs.get('date', datetime.now().isoformat())
+                description = kwargs.get('description', "")
                 events = _load_calendar()
                 event = {"id": len(events) + 1, "title": title, "date": date, "description": description}
                 events.append(event)
                 _save_calendar(events)
                 return {"event": event, "message": "Event added"}
             elif action == "remove_event":
-                event_id = params.get("event_id")
+                event_id = kwargs.get('event_id') or kwargs.get('id')
                 if event_id is None:
                     return {"error": "Missing 'event_id'"}
                 events = _load_calendar()
@@ -411,13 +414,13 @@ class CognitiveEngineV3:
         self.tool_registry.register(calendar_cap)
 
     def _register_email_tool(self):
-        def email_handler(params: dict) -> dict:
-            action = params.get("action")
+        def email_handler(**kwargs):
+            action = kwargs.get('action')
             if action != "send":
                 return {"error": "Only 'send' action is supported"}
-            to = params.get("to")
-            subject = params.get("subject")
-            body = params.get("body")
+            to = kwargs.get('to') or kwargs.get('recipient')
+            subject = kwargs.get('subject')
+            body = kwargs.get('body') or kwargs.get('content')
             if not to or not subject or not body:
                 return {"error": "Missing 'to', 'subject', or 'body'"}
 
@@ -493,8 +496,8 @@ class CognitiveEngineV3:
                     return ""
             return ""
 
-        def email_reader_handler(params: dict) -> dict:
-            action = params.get("action", "list")
+        def email_reader_handler(**kwargs):
+            action = kwargs.get('action', 'list')
             imap_host = os.getenv("IMAP_HOST", "imap.gmail.com")
             imap_port = int(os.getenv("IMAP_PORT", 993))
             imap_user = os.getenv("EMAIL_USER", "")
@@ -509,7 +512,7 @@ class CognitiveEngineV3:
 
                 if action == "list":
                     conn.select("INBOX")
-                    limit = params.get("limit", 10)
+                    limit = kwargs.get('limit', 10)
                     status, data = conn.search(None, "ALL")
                     if status != "OK":
                         return {"error": "Failed to search emails"}
@@ -537,7 +540,7 @@ class CognitiveEngineV3:
                     return {"emails": emails, "count": len(emails)}
 
                 elif action == "read":
-                    email_id = params.get("email_id")
+                    email_id = kwargs.get('email_id')
                     if not email_id:
                         return {"error": "Missing 'email_id' for read action"}
                     conn.select("INBOX")
@@ -580,10 +583,11 @@ class CognitiveEngineV3:
         security_module = SecurityModule(secure_memory=self.secure_memory)
         synapse = SynapseInterface(security_module, secure_memory=self.secure_memory)
 
-        def file_manager_handler(params: dict) -> dict:
-            action = params.get("action")
-            path = params.get("path")
-            content = params.get("content")
+        def file_manager_handler(**kwargs):
+            action = kwargs.get('action')
+            # Accept both 'path' and 'directory'
+            path = kwargs.get('path') or kwargs.get('directory')
+            content = kwargs.get('content')
 
             if action == "list":
                 if not path:
@@ -647,7 +651,7 @@ class CognitiveEngineV3:
     def _register_github_tool(self):
         if not GITHUB_AVAILABLE:
             logging.warning("PyGithub not installed. GitHub capability will be disabled.")
-            def github_handler(params: dict) -> dict:
+            def github_handler(**kwargs):
                 return {"error": "PyGithub not installed. Please install: pip install PyGithub"}
             github_cap = CapabilityDefinition(
                 name="github",
@@ -664,8 +668,8 @@ class CognitiveEngineV3:
         if not github_token:
             logging.warning("GITHUB_TOKEN not set. GitHub capability will be limited.")
 
-        def github_handler(params: dict) -> dict:
-            action = params.get("action")
+        def github_handler(**kwargs):
+            action = kwargs.get('action')
             if not github_token:
                 return {"error": "GITHUB_TOKEN not set in environment variables"}
             try:
@@ -676,16 +680,16 @@ class CognitiveEngineV3:
                         repos.append({"name": repo.name, "url": repo.html_url})
                     return {"repos": repos}
                 elif action == "create_repo":
-                    name = params.get("name")
+                    name = kwargs.get('name')
                     if not name:
                         return {"error": "Missing 'name'"}
-                    description = params.get("description", "")
-                    private = params.get("private", False)
+                    description = kwargs.get('description', "")
+                    private = kwargs.get('private', False)
                     repo = g.get_user().create_repo(name, description=description, private=private)
                     return {"repo": {"name": repo.name, "url": repo.html_url}}
                 elif action == "get_file":
-                    repo_name = params.get("repo")
-                    path = params.get("path")
+                    repo_name = kwargs.get('repo') or kwargs.get('repository')
+                    path = kwargs.get('path')
                     if not repo_name or not path:
                         return {"error": "Missing 'repo' or 'path'"}
                     repo = g.get_repo(repo_name)
@@ -697,19 +701,19 @@ class CognitiveEngineV3:
                             return {"error": "File not found"}
                         return {"error": str(e)}
                 elif action == "create_issue":
-                    repo_name = params.get("repo")
-                    title = params.get("title")
-                    body = params.get("body", "")
+                    repo_name = kwargs.get('repo') or kwargs.get('repository')
+                    title = kwargs.get('title')
+                    body = kwargs.get('body', "")
                     if not repo_name or not title:
                         return {"error": "Missing 'repo' or 'title'"}
                     repo = g.get_repo(repo_name)
                     issue = repo.create_issue(title=title, body=body)
                     return {"issue": {"number": issue.number, "url": issue.html_url}}
                 elif action == "push":
-                    repo_name = params.get("repo")
-                    branch = params.get("branch", "main")
-                    commit_message = params.get("message", "Automated commit via Jarvis")
-                    files = params.get("files", {})
+                    repo_name = kwargs.get('repo') or kwargs.get('repository')
+                    branch = kwargs.get('branch', "main")
+                    commit_message = kwargs.get('message', "Automated commit via Jarvis")
+                    files = kwargs.get('files', {})
                     if not repo_name:
                         return {"error": "Missing 'repo'"}
                     if not files:
@@ -761,15 +765,15 @@ class CognitiveEngineV3:
         self.tool_registry.register(github_cap)
 
     def _register_tts_tool(self):
-        def tts_handler(params: dict) -> dict:
-            text = params.get("text")
+        def tts_handler(**kwargs):
+            text = kwargs.get('text')
             if not text:
                 return {"error": "Missing 'text'"}
             tts_url = os.getenv("TTS_URL", "http://localhost:5051/v1/audio/speech")
             tts_api_key = os.getenv("TTS_API_KEY", "your_tts_key")
-            voice = params.get("voice", "alloy")
-            response_format = params.get("response_format", "mp3")
-            speed = params.get("speed", 1.0)
+            voice = kwargs.get('voice', "alloy")
+            response_format = kwargs.get('response_format', "mp3")
+            speed = kwargs.get('speed', 1.0)
 
             try:
                 resp = requests.post(
@@ -788,7 +792,7 @@ class CognitiveEngineV3:
                 )
                 if resp.status_code != 200:
                     return {"error": f"TTS error: {resp.text}"}
-                output_path = params.get("output_path", f"speech.{response_format}")
+                output_path = kwargs.get('output_path', f"speech.{response_format}")
                 with open(output_path, "wb") as f:
                     f.write(resp.content)
                 return {
@@ -817,8 +821,8 @@ class CognitiveEngineV3:
         self.tool_registry.register(tts_cap)
 
     def _register_news_tool(self):
-        def news_handler(params: dict) -> dict:
-            topic = params.get("topic", "technology")
+        def news_handler(**kwargs):
+            topic = kwargs.get('topic', "technology")
             api_key = os.getenv("NEWS_API_KEY", "")
             if not api_key:
                 return {"error": "NEWS_API_KEY not set in environment variables"}
@@ -868,13 +872,14 @@ class CognitiveEngineV3:
             with open(TODO_FILE, 'w') as f:
                 json.dump(todos, f, indent=2)
 
-        def todo_handler(params: dict) -> dict:
-            action = params.get("action")
+        def todo_handler(**kwargs):
+            action = kwargs.get('action')
             if action == "list":
                 todos = _load_todos()
                 return {"todos": todos}
             elif action == "add":
-                title = params.get("title")
+                # Accept 'title' or 'task'
+                title = kwargs.get('title') or kwargs.get('task')
                 if not title:
                     return {"error": "Missing 'title'"}
                 todos = _load_todos()
@@ -884,7 +889,7 @@ class CognitiveEngineV3:
                 _save_todos(todos)
                 return {"todo": todo, "message": "Todo added"}
             elif action == "complete":
-                todo_id = params.get("id")
+                todo_id = kwargs.get('id')
                 if todo_id is None:
                     return {"error": "Missing 'id'"}
                 todos = _load_todos()
@@ -895,7 +900,7 @@ class CognitiveEngineV3:
                         return {"todo": t, "message": "Todo marked as complete"}
                 return {"error": "Todo not found"}
             elif action == "delete":
-                todo_id = params.get("id")
+                todo_id = kwargs.get('id')
                 if todo_id is None:
                     return {"error": "Missing 'id'"}
                 todos = _load_todos()
@@ -936,14 +941,14 @@ class CognitiveEngineV3:
             with open(NOTES_FILE, 'w') as f:
                 json.dump(notes, f, indent=2)
 
-        def notes_handler(params: dict) -> dict:
-            action = params.get("action")
+        def notes_handler(**kwargs):
+            action = kwargs.get('action')
             if action == "list":
                 notes = _load_notes()
                 return {"notes": notes}
             elif action == "create":
-                title = params.get("title")
-                content = params.get("content")
+                title = kwargs.get('title')
+                content = kwargs.get('content')
                 if not title or not content:
                     return {"error": "Missing 'title' or 'content'"}
                 notes = _load_notes()
@@ -953,7 +958,7 @@ class CognitiveEngineV3:
                 _save_notes(notes)
                 return {"note": note, "message": "Note created"}
             elif action == "read":
-                note_id = params.get("id")
+                note_id = kwargs.get('id')
                 if note_id is None:
                     return {"error": "Missing 'id'"}
                 notes = _load_notes()
@@ -962,9 +967,9 @@ class CognitiveEngineV3:
                         return {"note": n}
                 return {"error": "Note not found"}
             elif action == "update":
-                note_id = params.get("id")
-                title = params.get("title")
-                content = params.get("content")
+                note_id = kwargs.get('id')
+                title = kwargs.get('title')
+                content = kwargs.get('content')
                 if note_id is None:
                     return {"error": "Missing 'id'"}
                 if not title and not content:
@@ -981,7 +986,7 @@ class CognitiveEngineV3:
                         return {"note": n, "message": "Note updated"}
                 return {"error": "Note not found"}
             elif action == "delete":
-                note_id = params.get("id")
+                note_id = kwargs.get('id')
                 if note_id is None:
                     return {"error": "Missing 'id'"}
                 notes = _load_notes()
@@ -1016,7 +1021,6 @@ class CognitiveEngineV3:
         self.dept_registry.register(self.coding_dept)
         self.dept_registry.register(self.system_dept)
 
-        # Sync capabilities from tool_registry to cap_registry (old) for department mapping
         logger.info(f"[V2] Syncing {len(self.tool_registry._capabilities)} capabilities to old registry...")
         from src.core.models import Capability
         for cap_def in self.tool_registry._capabilities.values():
