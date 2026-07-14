@@ -223,3 +223,96 @@ curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
   -d '{"message": "execute: echo Hello from Jarvis"}'
+
+# Jarvis OS – Project Context (Updated 2026-07-14)
+
+## 🧠 Current Status
+- **Phases 0–VI Complete** – architecture and core systems are in place.
+- **API**: Stable, responds to `/api/chat`, `/health`, etc.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Web UI**: Fully functional at `http://localhost:8000`.
+- **Research**: ✅ `research_specialist` executes Brave Search and returns results.
+- **Execute**: ✅ `execute:` commands run via `system_control` and return output.
+- **Fast‑path**: Greetings and simple queries are handled directly.
+
+## ✅ Completed Phases
+- **Phase 0**: Governance (Constitution, etc.)
+- **Phase I**: Architectural Consolidation (Goals, Tasks, Capabilities, Events, Memory)
+- **Phase II**: Core Abstractions (Planner, State Machine, Budgets)
+- **Phase III**: Execution Platform (Scheduler, Retry Engine)
+- **Phase IV**: Capability Platform (Contract, Context, Providers, Registry, Resolver, Execution, Confidence)
+- **Phase V**: Cognitive Platform (Experience, Attention, Workspace, Reflection, Learning, Knowledge, Recall)
+- **Phase VI**: Executive Model (Intent, Goals, Strategy, Planning, Decision, Delegation, Review, Adaptation)
+
+## 🧩 Key Components
+- **ExecutiveMind**: Orchestrates Intent → Goals → Strategy → Planning → Decision → Delegation → Execution → Review → Adaptation.
+- **CognitiveWorkspace**: Current "mind" of Jarvis (Goal, Task, Conversation, Memories, Capability Results).
+- **CapabilityRegistry**: Stores manifests, implementations, health, confidence.
+- **CapabilityResolver**: Scores and selects the best capability.
+- **PlanningEngine**: Creates Tasks from Goals and Strategy.
+- **DecisionEngine**: Commits to a course of action.
+- **DelegationManager**: Directs work to Capability and Execution Platforms.
+- **AdaptationEngine**: Changes direction when conditions change.
+- **KnowledgeStore**: Stores Facts, Procedures, Preferences, Relationships, Skills, Projects, Decisions, etc.
+- **RecallEngine**: Active memory API – provides suggestions, warnings, reminders.
+- **CognitiveAssistant**: Subconscious of Jarvis – constant monitoring.
+
+## 🧪 Working Features
+- **`research_specialist`** – uses Brave Search API (key must be in `.env` as `BRAVE_API_KEY`).
+- **`execute:`** – runs system commands via `system_control` (safe, with security policies).
+- **Web UI** – full voice, wake‑word, TTS, streaming, theme toggle.
+- **Memory** – embeddings, semantic search, SQLite/Postgres, consolidation pipeline.
+- **User management** – registration, login, API key authentication.
+- **TTS proxy** – via Edge TTS container.
+- **Transcription** – Whisper (tiny) for voice input.
+- **Capability registry** – 15 capabilities registered (research, coding, system, weather, calendar, email, etc.).
+- **DigitalTwin** – hardware, capabilities, environment stored as MemoryRecords.
+- **Event Bus** – standard vocabulary, audit logging.
+
+## 📁 Key Files (Current)
+| File | Purpose |
+|------|---------|
+| `src/api.py` | FastAPI entry point, streaming, auth |
+| `src/v2_main.py` | Engine initialisation, registries, departments |
+| `src/executive/mind.py` | Goal creation, fast‑path, LLM ReAct, direct execution for research/execute |
+| `src/executive/chief_of_staff.py` | Synchronous capability execution (inline, returns result) |
+| `src/core/tools.py` | Unified Capability Registry |
+| `src/core/models.py` | Core data models (Goal, Task, Capability, Event, Memory) |
+| `src/bridge/synapse.py` | Secure system command execution |
+| `src/core/security.py` | Path/command validation, audit |
+| `src/llm_engine.py` | Model loading, inference |
+| `src/templates.py` | System prompt and formatting |
+| `src/static/index.html` | Full web UI |
+| `governance/core_abstractions.md` | Five core abstractions (Goal, Task, Capability, Event, Memory) |
+| `CONSTITUTION.md`, `DEVELOPMENT_CONSTITUTION.md`, `EXECUTION_MODEL.md`, `OPERATIONAL_POLICIES.md`, `ARCHITECTURE.md` | Governance documents |
+
+## ⚠️ Known Issues / Limitations
+- **Tool parameter mismatches** – some tools (e.g., `file_manager`, `todo`) receive unexpected parameters from the LLM, causing errors. These are non‑blocking and will be addressed in a future update.
+- **Multi‑step planning** – Planner currently creates only one Task per Goal. Will be enhanced in later phases.
+- **`psycopg2` not installed** – falls back to SQLite. Works for now; can install later for Postgres.
+- **Budget enforcement** – defined but not fully implemented in the Scheduler. Will be expanded in future phases.
+
+## 🚀 Next Phase
+**Phase VII: Human Interaction Platform**
+- Enhance voice, conversation, personality, UI, notifications, clarification, multi‑modal interaction, session continuity.
+- Ensure the user always experiences a single intelligence.
+
+## 🧪 Test Commands
+```bash
+# Greeting
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "Hello Jarvis"}'
+
+# Research
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "Research the future of AI"}'
+
+# Execute system command
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "execute: echo Hello from Jarvis"}'
