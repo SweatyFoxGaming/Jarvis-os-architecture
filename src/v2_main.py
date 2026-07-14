@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.header import decode_header
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+import asyncio
 
 import requests
 
@@ -27,7 +28,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from src.core.event_bus import EventBus
-from src.core.registry import DepartmentRegistry, CapabilityRegistry
+from src.core.registry import DepartmentRegistry, CapabilityRegistry as CapabilityRegistryOld
 from src.core.hardware import HardwareManager
 from src.core.model_manager import ModelManager
 from src.executive.chief_of_staff import ChiefOfStaff
@@ -36,11 +37,47 @@ from src.departments.research import ResearchDepartment
 from src.departments.coding import CodingDepartment
 from src.departments.system import SystemDepartment
 from src.core.digital_twin import DigitalTwin
-from src.core.bootstrapping import register_initial_capabilities
 
 from src.llm_engine import LLMEngine
-from src.core.tools import ToolRegistry, ToolDefinition, ToolParameter
+from src.core.tools import ToolRegistry, CapabilityDefinition, CapabilityParameter
 from src.memory.knowledge_librarian import KnowledgeLibrarian
+from src.core.models import ExecutionState
+
+# ---- Capability Platform imports ----
+from src.capabilities import CapabilityRegistry as NewCapabilityRegistry
+from src.capabilities.providers import BuiltinProvider
+from src.capabilities.resolver import CapabilityResolver
+from src.capabilities.execution import CapabilityExecutionEngine
+from src.capabilities.context import ExecutionContext
+from src.capabilities.budgets import CapabilityBudget
+# ---- End Capability Platform imports ----
+
+# ---- Cognitive Platform imports ----
+from src.cognition import (
+    CognitiveWorkspace,
+    AttentionFilter,
+    ReflectionEngine,
+    LearningEngine,
+    KnowledgeStore,
+    RecallEngine,
+    CognitiveAssistant,
+    SleepScheduler,
+    CognitiveHealthMonitor,
+)
+from src.cognition.models import Experience, ExperienceSource, ExperienceType
+# ---- End Cognitive Platform imports ----
+
+# ---- Executive Platform imports ----
+from src.executive.state import ExecutiveState
+from src.executive.intent import IntentInterpreter
+from src.executive.goals import GoalManager
+from src.executive.strategy import StrategyEngine
+from src.executive.planning import PlanningEngine
+from src.executive.decision import DecisionEngine
+from src.executive.delegation import DelegationManager
+from src.executive.review import ReviewEngine
+from src.executive.adaptation import AdaptationEngine
+# ---- End Executive Platform imports ----
 
 # System Control imports
 from src.bridge.synapse import SynapseInterface
@@ -65,13 +102,14 @@ except ImportError:
 
 class CognitiveEngineV3:
     def __init__(self, secure_memory=None, secure_runner=None):
-        self.event_bus = EventBus()
-        self.dept_registry = DepartmentRegistry()
-        self.cap_registry = CapabilityRegistry()
-        self.twin = DigitalTwin()
-
         self.secure_memory = secure_memory
         self.secure_runner = secure_runner
+
+        # ---------- Core Infrastructure ----------
+        self.event_bus = EventBus()
+        self.dept_registry = DepartmentRegistry()
+        self.cap_registry = CapabilityRegistryOld()
+        self.twin = DigitalTwin(secure_memory=self.secure_memory)
 
         if self.secure_memory:
             self.event_bus.set_secure_memory(self.secure_memory)
@@ -94,7 +132,7 @@ class CognitiveEngineV3:
             secure_runner=self.secure_runner,
         )
 
-        # ---------- Tool Registry ----------
+        # ---------- Tool Registry (Capability Registry) ----------
         self.tool_registry = ToolRegistry(
             chief_of_staff=self.cos,
             cap_registry=self.cap_registry,
@@ -102,8 +140,8 @@ class CognitiveEngineV3:
         )
         self.tool_registry.set_event_bus(self.event_bus)
 
-        # ---------- Register All Tools ----------
-        self._register_existing_tools()
+        # ---------- Register All Capabilities (hardcoded) ----------
+        self._register_existing_capabilities()
         self._register_calendar_tool()
         self._register_email_tool()
         self._register_email_reader_tool()
@@ -114,9 +152,53 @@ class CognitiveEngineV3:
         self._register_todo_tool()
         self._register_notes_tool()
 
-        logging.info(f"✅ Registered {len(self.tool_registry._tools)} tools.")
+        logging.info(f"✅ Registered {len(self.tool_registry._capabilities)} capabilities in tool registry.")
 
-        # Executive Mind
+        # ---------- Capability Platform ----------
+        self.capability_registry = NewCapabilityRegistry()
+        self.builtin_provider = BuiltinProvider(self.tool_registry, self.engine)
+        self.resolver = CapabilityResolver(self.capability_registry)
+        self.execution_engine = CapabilityExecutionEngine(self.capability_registry, self.event_bus.publish)
+
+        # Discover and register built‑in capabilities
+        manifests = self.builtin_provider.discover()
+        for manifest in manifests:
+            impl = self.builtin_provider.load(manifest)
+            if impl:
+                self.capability_registry.register(manifest, impl)
+
+        # ---------- Cognitive Platform ----------
+        self.knowledge_store = KnowledgeStore(self.secure_memory) if self.secure_memory else None
+        self.workspace = CognitiveWorkspace()
+        self.reflection_engine = ReflectionEngine(self.engine)
+        self.learning_engine = LearningEngine(self.knowledge_store) if self.knowledge_store else None
+        self.recall_engine = RecallEngine(self.knowledge_store) if self.knowledge_store else None
+        self.assistant = CognitiveAssistant(self.recall_engine) if self.recall_engine else None
+        self.health_monitor = CognitiveHealthMonitor(self.knowledge_store) if self.knowledge_store else None
+        self.sleep_scheduler = SleepScheduler(
+            reflection_engine=self.reflection_engine,
+            learning_engine=self.learning_engine,
+            health_monitor=self.health_monitor,
+            workspace=self.workspace,
+            interval_seconds=3600 * 12,
+        ) if all([self.reflection_engine, self.learning_engine, self.health_monitor]) else None
+
+        self.attention_filter = AttentionFilter()
+        logging.info("✅ Cognitive Platform initialized.")
+
+        # ---------- Executive Platform ----------
+        self.executive_state = ExecutiveState()
+        self.intent_interpreter = IntentInterpreter(self.engine)
+        self.goal_manager = GoalManager(self.executive_state)
+        self.strategy_engine = StrategyEngine(self.engine)
+        self.planning_engine = PlanningEngine(self.cap_registry, self.event_bus)
+        self.decision_engine = DecisionEngine()
+        self.delegation_manager = DelegationManager(self.cos)
+        self.review_engine = ReviewEngine()
+        self.adaptation_engine = AdaptationEngine(self.executive_state)
+        logging.info("✅ Executive Platform initialized.")
+
+        # ---------- Executive Mind ----------
         self.mind = ExecutiveMind(
             self.cos,
             self.event_bus,
@@ -125,6 +207,10 @@ class CognitiveEngineV3:
             tool_registry=self.tool_registry,
             secure_memory=self.secure_memory,
             secure_runner=self.secure_runner,
+            cap_registry=self.cap_registry,
+            cognitive_workspace=self.workspace,
+            cognitive_assistant=self.assistant,
+            recall_engine=self.recall_engine,
         )
 
         # Departments
@@ -152,49 +238,54 @@ class CognitiveEngineV3:
 
         self._setup()
 
+        # ---------- Start Sleep Scheduler ----------
+        if self.sleep_scheduler:
+            asyncio.create_task(self.sleep_scheduler.start())
+            logging.info("[V2] Sleep scheduler started.")
+
     # ---------- Registration Helpers ----------
-    def _register_existing_tools(self):
+    def _register_existing_capabilities(self):
         # Research
-        research_tool = ToolDefinition(
+        research_cap = CapabilityDefinition(
             name="research_specialist",
             description="Perform deep factual research and evidence collection on any topic.",
             parameters=[
-                ToolParameter(name="objective", type="string", description="The topic to research", required=True),
-                ToolParameter(name="depth", type="string", description="Research depth: brief, standard, or comprehensive", required=False, enum=["brief", "standard", "comprehensive"]),
+                CapabilityParameter(name="objective", type="string", description="The topic to research", required=True),
+                CapabilityParameter(name="depth", type="string", description="Research depth: brief, standard, or comprehensive", required=False, enum=["brief", "standard", "comprehensive"]),
             ],
             department="Research",
         )
-        self.tool_registry.register_tool(research_tool)
+        self.tool_registry.register(research_cap)
 
         # Coding
-        coding_tool = ToolDefinition(
+        coding_cap = CapabilityDefinition(
             name="coding_specialist",
             description="Generate, analyze, and optimize source code.",
             parameters=[
-                ToolParameter(name="objective", type="string", description="Coding task description", required=True),
-                ToolParameter(name="language", type="string", description="Programming language", required=False),
+                CapabilityParameter(name="objective", type="string", description="Coding task description", required=True),
+                CapabilityParameter(name="language", type="string", description="Programming language", required=False),
             ],
             department="Coding",
         )
-        self.tool_registry.register_tool(coding_tool)
+        self.tool_registry.register(coding_cap)
 
         # Time
-        time_tool = ToolDefinition(
+        time_cap = CapabilityDefinition(
             name="time_service",
             description="Retrieve the current system time and date.",
             parameters=[],
             department="System",
         )
-        self.tool_registry.register_tool(time_tool)
+        self.tool_registry.register(time_cap)
 
         # System Info
-        sysinfo_tool = ToolDefinition(
+        sysinfo_cap = CapabilityDefinition(
             name="system_info",
             description="Retrieve hardware statistics and OS status.",
             parameters=[],
             department="System",
         )
-        self.tool_registry.register_tool(sysinfo_tool)
+        self.tool_registry.register(sysinfo_cap)
 
         # Weather
         def get_weather(params: dict) -> dict:
@@ -209,15 +300,15 @@ class CognitiveEngineV3:
             except Exception as e:
                 return {"error": str(e)}
 
-        weather_tool = ToolDefinition(
+        weather_cap = CapabilityDefinition(
             name="weather",
             description="Get the current weather for a city. Provide the city name.",
             parameters=[
-                ToolParameter(name="city", type="string", description="Name of the city", required=True),
+                CapabilityParameter(name="city", type="string", description="Name of the city", required=True),
             ],
             handler=get_weather,
         )
-        self.tool_registry.register_tool(weather_tool)
+        self.tool_registry.register(weather_cap)
 
         # System Control
         security_module = SecurityModule(secure_memory=self.secure_memory)
@@ -246,20 +337,19 @@ class CognitiveEngineV3:
             else:
                 return {"error": f"Unknown action: {action}"}
 
-        system_tool = ToolDefinition(
+        system_cap = CapabilityDefinition(
             name="system_control",
             description="Execute system commands, read files, or write files. Use with caution. Actions: 'execute' (requires 'command'), 'read_file' (requires 'path'), 'write_file' (requires 'path' and 'content').",
             parameters=[
-                ToolParameter(name="action", type="string", description="The action: 'execute', 'read_file', or 'write_file'", required=True, enum=["execute", "read_file", "write_file"]),
-                ToolParameter(name="command", type="string", description="The system command to execute (for action='execute')", required=False),
-                ToolParameter(name="path", type="string", description="File path (for read_file or write_file)", required=False),
-                ToolParameter(name="content", type="string", description="Content to write (for write_file)", required=False),
+                CapabilityParameter(name="action", type="string", description="The action: 'execute', 'read_file', or 'write_file'", required=True, enum=["execute", "read_file", "write_file"]),
+                CapabilityParameter(name="command", type="string", description="The system command to execute (for action='execute')", required=False),
+                CapabilityParameter(name="path", type="string", description="File path (for read_file or write_file)", required=False),
+                CapabilityParameter(name="content", type="string", description="Content to write (for write_file)", required=False),
             ],
             handler=system_control_handler,
         )
-        self.tool_registry.register_tool(system_tool)
+        self.tool_registry.register(system_cap)
 
-    # ---------- Calendar Tool ----------
     def _register_calendar_tool(self):
         CALENDAR_FILE = os.path.join(project_root, "data", "calendar.json")
 
@@ -306,21 +396,20 @@ class CognitiveEngineV3:
             else:
                 return {"error": f"Unknown action: {action}"}
 
-        calendar_tool = ToolDefinition(
+        calendar_cap = CapabilityDefinition(
             name="calendar",
             description="Manage calendar events. Actions: 'list_events', 'add_event' (requires 'title', optional 'date', 'description'), 'remove_event' (requires 'event_id').",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action to perform", required=True, enum=["list_events", "add_event", "remove_event"]),
-                ToolParameter(name="title", type="string", description="Event title (for add_event)", required=False),
-                ToolParameter(name="date", type="string", description="Event date (ISO format, optional)", required=False),
-                ToolParameter(name="description", type="string", description="Event description (optional)", required=False),
-                ToolParameter(name="event_id", type="integer", description="Event ID (for remove_event)", required=False),
+                CapabilityParameter(name="action", type="string", description="Action to perform", required=True, enum=["list_events", "add_event", "remove_event"]),
+                CapabilityParameter(name="title", type="string", description="Event title (for add_event)", required=False),
+                CapabilityParameter(name="date", type="string", description="Event date (ISO format, optional)", required=False),
+                CapabilityParameter(name="description", type="string", description="Event description (optional)", required=False),
+                CapabilityParameter(name="event_id", type="integer", description="Event ID (for remove_event)", required=False),
             ],
             handler=calendar_handler,
         )
-        self.tool_registry.register_tool(calendar_tool)
+        self.tool_registry.register(calendar_cap)
 
-    # ---------- Email Sender Tool ----------
     def _register_email_tool(self):
         def email_handler(params: dict) -> dict:
             action = params.get("action")
@@ -355,20 +444,19 @@ class CognitiveEngineV3:
             except Exception as e:
                 return {"error": f"SMTP error: {str(e)}"}
 
-        email_tool = ToolDefinition(
+        email_cap = CapabilityDefinition(
             name="email",
             description="Send emails. Action: 'send' (requires 'to', 'subject', 'body'). SMTP credentials must be set in environment variables.",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action: 'send'", required=True, enum=["send"]),
-                ToolParameter(name="to", type="string", description="Recipient email address", required=True),
-                ToolParameter(name="subject", type="string", description="Email subject", required=True),
-                ToolParameter(name="body", type="string", description="Email body", required=True),
+                CapabilityParameter(name="action", type="string", description="Action: 'send'", required=True, enum=["send"]),
+                CapabilityParameter(name="to", type="string", description="Recipient email address", required=True),
+                CapabilityParameter(name="subject", type="string", description="Email subject", required=True),
+                CapabilityParameter(name="body", type="string", description="Email body", required=True),
             ],
             handler=email_handler,
         )
-        self.tool_registry.register_tool(email_tool)
+        self.tool_registry.register(email_cap)
 
-    # ---------- Email Reader Tool ----------
     def _register_email_reader_tool(self):
         def decode_email_header(header):
             if header is None:
@@ -475,20 +563,19 @@ class CognitiveEngineV3:
                 logger.error(f"IMAP error: {e}", exc_info=True)
                 return {"error": f"IMAP error: {str(e)}"}
 
-        email_reader_tool = ToolDefinition(
+        email_reader_cap = CapabilityDefinition(
             name="email_reader",
             description="Read emails from your inbox. Actions: 'list' (list recent emails, optional 'limit' and 'days'), 'read' (read full email by 'email_id'). Requires IMAP credentials in .env.",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action: 'list' or 'read'", required=True, enum=["list", "read"]),
-                ToolParameter(name="limit", type="integer", description="Number of emails to list (default 10)", required=False),
-                ToolParameter(name="days", type="integer", description="Days to look back (default 7)", required=False),
-                ToolParameter(name="email_id", type="string", description="Email ID to read (for 'read' action)", required=False),
+                CapabilityParameter(name="action", type="string", description="Action: 'list' or 'read'", required=True, enum=["list", "read"]),
+                CapabilityParameter(name="limit", type="integer", description="Number of emails to list (default 10)", required=False),
+                CapabilityParameter(name="days", type="integer", description="Days to look back (default 7)", required=False),
+                CapabilityParameter(name="email_id", type="string", description="Email ID to read (for 'read' action)", required=False),
             ],
             handler=email_reader_handler,
         )
-        self.tool_registry.register_tool(email_reader_tool)
+        self.tool_registry.register(email_reader_cap)
 
-    # ---------- File Manager Tool ----------
     def _register_file_manager_tool(self):
         security_module = SecurityModule(secure_memory=self.secure_memory)
         synapse = SynapseInterface(security_module, secure_memory=self.secure_memory)
@@ -545,38 +632,37 @@ class CognitiveEngineV3:
             else:
                 return {"error": f"Unknown action: {action}"}
 
-        file_manager_tool = ToolDefinition(
+        file_manager_cap = CapabilityDefinition(
             name="file_manager",
             description="Manage files and directories. Actions: 'list' (list directory contents), 'read' (read file), 'write' (write file), 'delete' (delete file), 'mkdir' (create directory). Requires 'path' for most actions.",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action: 'list', 'read', 'write', 'delete', 'mkdir'", required=True, enum=["list", "read", "write", "delete", "mkdir"]),
-                ToolParameter(name="path", type="string", description="File or directory path", required=False),
-                ToolParameter(name="content", type="string", description="Content to write (for 'write' action)", required=False),
+                CapabilityParameter(name="action", type="string", description="Action: 'list', 'read', 'write', 'delete', 'mkdir'", required=True, enum=["list", "read", "write", "delete", "mkdir"]),
+                CapabilityParameter(name="path", type="string", description="File or directory path", required=False),
+                CapabilityParameter(name="content", type="string", description="Content to write (for 'write' action)", required=False),
             ],
             handler=file_manager_handler,
         )
-        self.tool_registry.register_tool(file_manager_tool)
+        self.tool_registry.register(file_manager_cap)
 
-    # ---------- GitHub Tool ----------
     def _register_github_tool(self):
         if not GITHUB_AVAILABLE:
-            logging.warning("PyGithub not installed. GitHub tool will be disabled.")
+            logging.warning("PyGithub not installed. GitHub capability will be disabled.")
             def github_handler(params: dict) -> dict:
                 return {"error": "PyGithub not installed. Please install: pip install PyGithub"}
-            github_tool = ToolDefinition(
+            github_cap = CapabilityDefinition(
                 name="github",
                 description="Interact with GitHub (placeholder – PyGithub not installed).",
                 parameters=[
-                    ToolParameter(name="action", type="string", description="Action", required=True),
+                    CapabilityParameter(name="action", type="string", description="Action", required=True),
                 ],
                 handler=github_handler,
             )
-            self.tool_registry.register_tool(github_tool)
+            self.tool_registry.register(github_cap)
             return
 
         github_token = os.getenv("GITHUB_TOKEN")
         if not github_token:
-            logging.warning("GITHUB_TOKEN not set. GitHub tool will be limited.")
+            logging.warning("GITHUB_TOKEN not set. GitHub capability will be limited.")
 
         def github_handler(params: dict) -> dict:
             action = params.get("action")
@@ -619,24 +705,21 @@ class CognitiveEngineV3:
                     repo = g.get_repo(repo_name)
                     issue = repo.create_issue(title=title, body=body)
                     return {"issue": {"number": issue.number, "url": issue.html_url}}
-                # ---------- NEW PUSH ACTION ----------
                 elif action == "push":
                     repo_name = params.get("repo")
                     branch = params.get("branch", "main")
                     commit_message = params.get("message", "Automated commit via Jarvis")
-                    files = params.get("files", {})  # dict of file_path: new_content
+                    files = params.get("files", {})
                     if not repo_name:
                         return {"error": "Missing 'repo'"}
                     if not files:
                         return {"error": "No files to push"}
                     repo = g.get_repo(repo_name)
                     try:
-                        # Get the current commit SHA
                         ref = repo.get_git_ref(f"heads/{branch}")
                         latest_commit = repo.get_commit(ref.object.sha)
                         base_tree = latest_commit.commit.tree
 
-                        # Create blobs for each file
                         changes = []
                         for file_path, content in files.items():
                             blob = repo.create_git_blob(content, "utf-8")
@@ -646,12 +729,9 @@ class CognitiveEngineV3:
                                 "type": "blob",
                                 "sha": blob.sha,
                             })
-                        # Create a new tree
                         tree = repo.create_git_tree(changes, base_tree=base_tree)
-                        # Create a commit
                         parent = repo.get_git_commit(ref.object.sha)
                         commit = repo.create_git_commit(commit_message, tree, [parent])
-                        # Update the reference
                         ref.edit(commit.sha, force=True)
                         return {"success": True, "commit": commit.sha, "message": commit_message}
                     except GithubException as e:
@@ -663,24 +743,23 @@ class CognitiveEngineV3:
             except Exception as e:
                 return {"error": str(e)}
 
-        github_tool = ToolDefinition(
+        github_cap = CapabilityDefinition(
             name="github",
             description="Interact with GitHub. Actions: 'list_repos', 'create_repo' (requires 'name'), 'get_file' (requires 'repo', 'path'), 'create_issue' (requires 'repo', 'title', optional 'body'), 'push' (requires 'repo', optional 'branch', 'message', 'files' - dictionary of file_path: content).",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action to perform", required=True, enum=["list_repos", "create_repo", "get_file", "create_issue", "push"]),
-                ToolParameter(name="repo", type="string", description="Repository name (owner/repo)", required=False),
-                ToolParameter(name="path", type="string", description="File path (for get_file)", required=False),
-                ToolParameter(name="title", type="string", description="Issue title (for create_issue)", required=False),
-                ToolParameter(name="body", type="string", description="Issue body (for create_issue)", required=False),
-                ToolParameter(name="branch", type="string", description="Branch name (default 'main')", required=False),
-                ToolParameter(name="message", type="string", description="Commit message (for push)", required=False),
-                ToolParameter(name="files", type="object", description="Dictionary of file_path: new_content (for push)", required=False),
+                CapabilityParameter(name="action", type="string", description="Action to perform", required=True, enum=["list_repos", "create_repo", "get_file", "create_issue", "push"]),
+                CapabilityParameter(name="repo", type="string", description="Repository name (owner/repo)", required=False),
+                CapabilityParameter(name="path", type="string", description="File path (for get_file)", required=False),
+                CapabilityParameter(name="title", type="string", description="Issue title (for create_issue)", required=False),
+                CapabilityParameter(name="body", type="string", description="Issue body (for create_issue)", required=False),
+                CapabilityParameter(name="branch", type="string", description="Branch name (default 'main')", required=False),
+                CapabilityParameter(name="message", type="string", description="Commit message (for push)", required=False),
+                CapabilityParameter(name="files", type="object", description="Dictionary of file_path: new_content (for push)", required=False),
             ],
             handler=github_handler,
         )
-        self.tool_registry.register_tool(github_tool)
+        self.tool_registry.register(github_cap)
 
-    # ---------- TTS Tool ----------
     def _register_tts_tool(self):
         def tts_handler(params: dict) -> dict:
             text = params.get("text")
@@ -719,7 +798,7 @@ class CognitiveEngineV3:
             except Exception as e:
                 return {"error": str(e)}
 
-        tts_tool = ToolDefinition(
+        tts_cap = CapabilityDefinition(
             name="text_to_speech",
             description=(
                 "Convert text to speech using Edge TTS. "
@@ -727,17 +806,16 @@ class CognitiveEngineV3:
                 "'response_format' (mp3/opus/aac/flac/wav/pcm), 'speed' (0.25-4.0), and 'output_path'."
             ),
             parameters=[
-                ToolParameter(name="text", type="string", description="Text to speak", required=True),
-                ToolParameter(name="voice", type="string", description="Voice: alloy, echo, fable, onyx, nova, shimmer", required=False),
-                ToolParameter(name="response_format", type="string", description="Audio format (default mp3)", required=False),
-                ToolParameter(name="speed", type="number", description="Speed 0.25-4.0 (default 1.0)", required=False),
-                ToolParameter(name="output_path", type="string", description="Where to save the audio file", required=False),
+                CapabilityParameter(name="text", type="string", description="Text to speak", required=True),
+                CapabilityParameter(name="voice", type="string", description="Voice: alloy, echo, fable, onyx, nova, shimmer", required=False),
+                CapabilityParameter(name="response_format", type="string", description="Audio format (default mp3)", required=False),
+                CapabilityParameter(name="speed", type="number", description="Speed 0.25-4.0 (default 1.0)", required=False),
+                CapabilityParameter(name="output_path", type="string", description="Where to save the audio file", required=False),
             ],
             handler=tts_handler,
         )
-        self.tool_registry.register_tool(tts_tool)
+        self.tool_registry.register(tts_cap)
 
-    # ---------- News Tool ----------
     def _register_news_tool(self):
         def news_handler(params: dict) -> dict:
             topic = params.get("topic", "technology")
@@ -763,17 +841,16 @@ class CognitiveEngineV3:
             except Exception as e:
                 return {"error": str(e)}
 
-        news_tool = ToolDefinition(
+        news_cap = CapabilityDefinition(
             name="news",
             description="Get the latest news headlines. Provide a 'topic' (e.g., technology, business, sports, science) – default is 'technology'.",
             parameters=[
-                ToolParameter(name="topic", type="string", description="Topic to search for (e.g., technology, business, sports)", required=False),
+                CapabilityParameter(name="topic", type="string", description="Topic to search for (e.g., technology, business, sports)", required=False),
             ],
             handler=news_handler,
         )
-        self.tool_registry.register_tool(news_tool)
+        self.tool_registry.register(news_cap)
 
-    # ---------- Todo List Tool ----------
     def _register_todo_tool(self):
         TODO_FILE = os.path.join(project_root, "data", "todos.json")
 
@@ -830,19 +907,18 @@ class CognitiveEngineV3:
             else:
                 return {"error": f"Unknown action: {action}"}
 
-        todo_tool = ToolDefinition(
+        todo_cap = CapabilityDefinition(
             name="todo",
             description="Manage your todo list. Actions: 'list' (list all todos), 'add' (add a new todo, requires 'title'), 'complete' (mark a todo as complete, requires 'id'), 'delete' (delete a todo, requires 'id').",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action: 'list', 'add', 'complete', 'delete'", required=True, enum=["list", "add", "complete", "delete"]),
-                ToolParameter(name="title", type="string", description="Title of the todo (for 'add' action)", required=False),
-                ToolParameter(name="id", type="integer", description="Todo ID (for 'complete' or 'delete')", required=False),
+                CapabilityParameter(name="action", type="string", description="Action: 'list', 'add', 'complete', 'delete'", required=True, enum=["list", "add", "complete", "delete"]),
+                CapabilityParameter(name="title", type="string", description="Title of the todo (for 'add' action)", required=False),
+                CapabilityParameter(name="id", type="integer", description="Todo ID (for 'complete' or 'delete')", required=False),
             ],
             handler=todo_handler,
         )
-        self.tool_registry.register_tool(todo_tool)
+        self.tool_registry.register(todo_cap)
 
-    # ---------- Notes Tool ----------
     def _register_notes_tool(self):
         NOTES_FILE = os.path.join(project_root, "data", "notes.json")
 
@@ -917,18 +993,18 @@ class CognitiveEngineV3:
             else:
                 return {"error": f"Unknown action: {action}"}
 
-        notes_tool = ToolDefinition(
+        notes_cap = CapabilityDefinition(
             name="notes",
             description="Manage notes. Actions: 'list' (list all notes), 'create' (create a new note, requires 'title' and 'content'), 'read' (read a note by 'id'), 'update' (update a note by 'id', optional 'title' or 'content'), 'delete' (delete a note by 'id').",
             parameters=[
-                ToolParameter(name="action", type="string", description="Action: 'list', 'create', 'read', 'update', 'delete'", required=True, enum=["list", "create", "read", "update", "delete"]),
-                ToolParameter(name="title", type="string", description="Title of the note", required=False),
-                ToolParameter(name="content", type="string", description="Content of the note", required=False),
-                ToolParameter(name="id", type="integer", description="Note ID", required=False),
+                CapabilityParameter(name="action", type="string", description="Action: 'list', 'create', 'read', 'update', 'delete'", required=True, enum=["list", "create", "read", "update", "delete"]),
+                CapabilityParameter(name="title", type="string", description="Title of the note", required=False),
+                CapabilityParameter(name="content", type="string", description="Content of the note", required=False),
+                CapabilityParameter(name="id", type="integer", description="Note ID", required=False),
             ],
             handler=notes_handler,
         )
-        self.tool_registry.register_tool(notes_tool)
+        self.tool_registry.register(notes_cap)
 
     # ---------- Setup ----------
     def _setup(self):
@@ -940,8 +1016,22 @@ class CognitiveEngineV3:
         self.dept_registry.register(self.coding_dept)
         self.dept_registry.register(self.system_dept)
 
-        register_initial_capabilities(self.cap_registry)
+        # Sync capabilities from tool_registry to cap_registry (old) for department mapping
+        logger.info(f"[V2] Syncing {len(self.tool_registry._capabilities)} capabilities to old registry...")
+        from src.core.models import Capability
+        for cap_def in self.tool_registry._capabilities.values():
+            cap_obj = Capability(
+                name=cap_def.name,
+                purpose=cap_def.description,
+                inputs={p.name: p.description for p in cap_def.parameters},
+                outputs={},
+                estimated_time_sec=0,
+            )
+            self.cap_registry.register(cap_obj, cap_def.department or "System")
+            logger.info(f"[V2] Registered capability '{cap_def.name}' to department '{cap_def.department or 'System'}' in old registry.")
+
         self.twin.update_capabilities(self.cap_registry.list_capabilities())
+        logger.info(f"[V2] Old registry now has {len(self.cap_registry.list_capabilities())} capabilities.")
 
         logging.info("✅ All departments and capabilities registered.")
 
@@ -955,7 +1045,7 @@ class CognitiveEngineV3:
             dept = self.dept_registry.get_department(task.assigned_department_id)
             if dept:
                 dept.process_task(task)
-                if task.status.value == "completed":
+                if task.state == ExecutionState.COMPLETED:
                     results[task_id] = task.output_data
         return results
 
@@ -978,6 +1068,8 @@ class CognitiveEngineV3:
             self.librarian.shutdown()
         if self.secure_memory and hasattr(self.secure_memory, 'close'):
             self.secure_memory.close()
+        if self.sleep_scheduler:
+            asyncio.create_task(self.sleep_scheduler.stop())
         for dept in [self.research_dept, self.coding_dept, self.system_dept]:
             if hasattr(dept, 'shutdown'):
                 dept.shutdown()

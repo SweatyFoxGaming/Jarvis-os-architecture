@@ -1,16 +1,6 @@
-"""
-Hardware detection and optimization module for Phoenix OS.
-
-Provides:
-- Real‑time hardware detection (CPU, RAM, OS, GPU)
-- Optimized settings based on hardware and environment variables
-- Audit logging to secure memory (optional)
-"""
-
 import os
 import logging
-import platform
-import multiprocessing
+from enum import Enum
 from typing import Dict, Any, Optional
 
 # Secure components (injected for audit logging)
@@ -24,203 +14,139 @@ try:
 except ImportError:
     SecureCommandRunner = None
 
-# Logger
 logger = logging.getLogger(__name__)
 
 
+class HardwareProfile(Enum):
+    """Hardware performance profiles."""
+    LOW = "low"
+    PERFORMANCE = "performance"
+
+    @classmethod
+    def from_env(cls) -> "HardwareProfile":
+        env_value = os.getenv("HARDWARE_PROFILE", "").strip().lower()
+        if env_value == "performance":
+            return cls.PERFORMANCE
+        elif env_value == "low":
+            return cls.LOW
+        else:
+            if env_value:
+                logger.warning(f"Unknown HARDWARE_PROFILE '{env_value}'. Falling back to LOW.")
+            return cls.LOW
+
+    def get_settings(self) -> Dict[str, Any]:
+        if self == HardwareProfile.PERFORMANCE:
+            return {
+                "threads": 4,
+                "context_window": 4096,
+                "n_ctx": 4096,
+                "n_batch": 512,
+                "model_quantization": "Q8_0",
+                "semantic_search": True,
+                "gpu_layers": 0,
+            }
+        else:  # LOW
+            return {
+                "threads": 2,
+                "context_window": 2048,
+                "n_ctx": 2048,
+                "n_batch": 256,
+                "model_quantization": "Q4_K_M",
+                "semantic_search": False,
+                "gpu_layers": 0,
+            }
+
+
 class HardwareManager:
-    """
-    Hardware detection and optimization manager.
-    Provides static methods to detect hardware and return optimized settings.
-    Now with logging, exception handling, and optional audit logging.
-    """
+    """Hardware detection and optimization manager."""
+    _secure_memory: Optional[SecureMemoryStore] = None
+    _secure_runner: Optional[SecureCommandRunner] = None
 
     @staticmethod
     def set_secure_memory(secure_memory: SecureMemoryStore) -> None:
-        """
-        Inject secure memory for audit logging (global for the class).
-        """
         HardwareManager._secure_memory = secure_memory
         logger.info("[HardwareManager] SecureMemoryStore attached.")
 
     @staticmethod
     def set_secure_runner(secure_runner: SecureCommandRunner) -> None:
-        """Inject secure command runner (for future use)."""
         HardwareManager._secure_runner = secure_runner
         logger.info("[HardwareManager] SecureCommandRunner attached.")
 
-    # Class-level storage for secure components
-    _secure_memory: Optional[SecureMemoryStore] = None
-    _secure_runner: Optional[SecureCommandRunner] = None
-
     @staticmethod
     def detect_hardware() -> Dict[str, Any]:
-        """
-        Detect hardware capabilities: OS, CPU, RAM, GPU (if possible).
-
-        Returns:
-            Dictionary containing hardware information.
-
-        Raises:
-            Exception: If detection fails (caught internally and logged).
-        """
         logger.info("[HardwareManager] Detecting hardware...")
-
         try:
-            # Basic system info
+            import psutil
+            cpu_count = psutil.cpu_count(logical=True)
+            mem = psutil.virtual_memory()
+            total_ram_gb = mem.total / (1024 ** 3)
+
             info = {
-                "os": platform.system(),
-                "os_release": platform.release(),
-                "cpu_count": multiprocessing.cpu_count(),
-                "architecture": platform.machine(),
-                "processor": platform.processor() or "Unknown",
+                "cpu_count": cpu_count or 2,
+                "total_ram_gb": round(total_ram_gb, 1),
+                "available_ram_gb": round(mem.available / (1024 ** 3), 1),
+                "platform": os.uname().sysname if hasattr(os, 'uname') else "Unknown",
             }
-
-            # RAM info using psutil (fallback if not installed)
-            try:
-                import psutil
-                mem = psutil.virtual_memory()
-                info["ram_total_gb"] = round(mem.total / (1024 ** 3), 2)
-                info["ram_available_gb"] = round(mem.available / (1024 ** 3), 2)
-            except ImportError:
-                logger.warning("psutil not installed. RAM detection unavailable.")
-                info["ram_total_gb"] = 4.0  # fallback
-                info["ram_available_gb"] = 2.0
-
-            # GPU detection (optional, try subprocess)
-            try:
-                import subprocess
-                if platform.system() == "Linux":
-                    # Try lspci
-                    result = subprocess.run(
-                        ["lspci"], capture_output=True, text=True, timeout=2
-                    )
-                    if "NVIDIA" in result.stdout:
-                        info["gpu"] = "NVIDIA (detected via lspci)"
-                    elif "AMD" in result.stdout:
-                        info["gpu"] = "AMD (detected via lspci)"
-                    else:
-                        info["gpu"] = "Unknown (no discrete GPU found)"
-                elif platform.system() == "Windows":
-                    # Could use wmic, but skip for simplicity
-                    info["gpu"] = "Windows GPU detection not implemented"
-                else:
-                    info["gpu"] = "Unknown"
-            except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-                logger.debug(f"GPU detection failed: {e}")
-                info["gpu"] = "Not detected (lspci/wmic unavailable)"
-
             logger.info(f"[HardwareManager] Detection complete: {info}")
             return info
-
+        except ImportError:
+            logger.warning("psutil not installed. Hardware detection limited.")
+            return {"cpu_count": 2, "total_ram_gb": 4.0, "available_ram_gb": 2.0, "platform": "Unknown"}
         except Exception as e:
-            logger.error(f"[HardwareManager] Hardware detection failed: {e}", exc_info=True)
-            # Return minimal fallback
-            return {
-                "os": platform.system(),
-                "cpu_count": 2,
-                "ram_total_gb": 4.0,
-                "ram_available_gb": 2.0,
-                "gpu": "Unknown (detection failed)",
-            }
+            logger.error(f"Hardware detection failed: {e}", exc_info=True)
+            return {"cpu_count": 2, "total_ram_gb": 4.0, "available_ram_gb": 2.0, "platform": "Unknown"}
 
     @staticmethod
     def get_optimized_settings(hardware_info: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Compute optimized LLM settings based on hardware and environment variables.
+        profile = HardwareProfile.from_env()
+        settings = profile.get_settings()
 
-        Args:
-            hardware_info: Dictionary from detect_hardware().
-
-        Returns:
-            Settings dictionary with keys: threads, batch_size, context_window,
-            model_quantization, and optionally others.
-
-        Overrides via environment variables (prefixed with HARDWARE_):
-            - HARDWARE_THREADS
-            - HARDWARE_BATCH_SIZE
-            - HARDWARE_CONTEXT_WINDOW
-            - HARDWARE_MODEL_QUANTIZATION
-        """
-        ram_gb = hardware_info.get("ram_total_gb", 4.0)
         cpu_count = hardware_info.get("cpu_count", 2)
+        ram_gb = hardware_info.get("total_ram_gb", 4.0)
 
-        # Base settings
-        settings = {
-            "threads": max(1, cpu_count - 1),  # leave one core for system
-            "batch_size": 512,
-            "context_window": 2048,
-        }
+        if cpu_count >= 4 and ram_gb >= 8:
+            settings["threads"] = min(cpu_count, 8)
+            settings["n_batch"] = 512
+            logger.info(f"Upgraded threads to {settings['threads']} based on hardware.")
 
-        # Adjust based on RAM
-        if ram_gb <= 2:
+        if ram_gb < 4:
             settings["context_window"] = 1024
-            settings["model_quantization"] = "Q4_K_M"
-            settings["batch_size"] = 256
-            logger.info("[HardwareManager] Low RAM (<2GB) → small context and quantization.")
-        elif ram_gb <= 4:
-            settings["context_window"] = 2048
-            settings["model_quantization"] = "Q4_K_M"
-            logger.info("[HardwareManager] Medium RAM (2-4GB) → standard settings.")
-        else:
-            settings["context_window"] = 4096
-            settings["model_quantization"] = "Q8_0"
-            settings["batch_size"] = 1024
-            logger.info("[HardwareManager] High RAM (>4GB) → large context and high quantization.")
+            settings["n_ctx"] = 1024
+            logger.warning("Low RAM detected. Reduced context window to 1024.")
 
-        # Apply environment overrides
-        env_overrides = {
-            "threads": os.getenv("HARDWARE_THREADS"),
-            "batch_size": os.getenv("HARDWARE_BATCH_SIZE"),
-            "context_window": os.getenv("HARDWARE_CONTEXT_WINDOW"),
-            "model_quantization": os.getenv("HARDWARE_MODEL_QUANTIZATION"),
-        }
-
-        for key, value in env_overrides.items():
-            if value is not None:
+        # Environment overrides
+        for key in ["threads", "n_ctx", "n_batch", "gpu_layers"]:
+            env_key = f"HARDWARE_{key.upper()}"
+            if os.getenv(env_key):
                 try:
-                    if key in ("threads", "batch_size", "context_window"):
-                        settings[key] = int(value)
-                    else:
-                        settings[key] = value
-                    logger.info(f"[HardwareManager] Override: {key} = {settings[key]} (from env)")
+                    settings[key] = int(os.getenv(env_key))
+                    logger.info(f"Override: {key} = {settings[key]} from {env_key}")
                 except ValueError:
-                    logger.warning(f"[HardwareManager] Invalid integer for {key}='{value}' — ignored.")
+                    logger.warning(f"Invalid integer for {env_key}: {os.getenv(env_key)}")
 
-        # Audit log (if secure memory is available)
         if HardwareManager._secure_memory:
             try:
                 HardwareManager._secure_memory.insert(
                     text=f"HARDWARE_SETTINGS: {settings}",
-                    metadata={
-                        "type": "hardware_settings",
-                        "ram_gb": ram_gb,
-                        "cpu_count": cpu_count,
-                        "settings": settings.copy(),
-                    },
+                    metadata={"type": "hardware_settings", "settings": settings.copy()},
                 )
             except Exception as e:
-                logger.warning(f"[HardwareManager] Failed to audit log settings: {e}")
+                logger.warning(f"Failed to audit log settings: {e}")
 
         logger.info(f"[HardwareManager] Final optimized settings: {settings}")
         return settings
 
     @staticmethod
-    def get_profile_summary(hardware_info: Dict[str, Any]) -> str:
-        """Return a human-readable summary of the hardware profile."""
-        cpu = hardware_info.get("cpu_count", "?")
-        ram = hardware_info.get("ram_total_gb", "?")
-        gpu = hardware_info.get("gpu", "Unknown")
-        return f"CPU: {cpu} cores, RAM: {ram} GB, GPU: {gpu}"
+    def get_profile() -> HardwareProfile:
+        return HardwareProfile.from_env()
 
     @staticmethod
-    def shutdown() -> None:
-        """Clean up resources (close secure memory if used)."""
+    def shutdown():
         logger.info("[HardwareManager] Shutting down.")
         if HardwareManager._secure_memory and hasattr(HardwareManager._secure_memory, 'close'):
             try:
                 HardwareManager._secure_memory.close()
             except Exception as e:
-                logger.warning(f"[HardwareManager] Error closing secure memory: {e}")
+                logger.warning(f"Error closing secure memory: {e}")
         HardwareManager._secure_memory = None
         HardwareManager._secure_runner = None

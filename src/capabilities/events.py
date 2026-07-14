@@ -1,0 +1,11 @@
+class CapabilityEvents:
+    DISCOVERED = "CapabilityDiscovered"
+    VALIDATED = "CapabilityValidated"
+    REGISTERED = "CapabilityRegistered"
+    AVAILABLE = "CapabilityAvailable"
+    HEALTH_CHANGED = "CapabilityHealthChanged"
+    EXECUTION_STARTED = "CapabilityExecutionStarted"
+    EXECUTION_COMPLETED = "CapabilityExecutionCompleted"
+    EXECUTION_FAILED = "CapabilityExecutionFailed"
+    DEPRECATED = "CapabilityDeprecated"
+    RETIRED = "CapabilityRetired"

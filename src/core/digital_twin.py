@@ -1,237 +1,135 @@
 """
 Digital Twin – A continuously evolving representation of reality.
 
-Provides a central state store for JARVIS to reason about the world,
-including hardware, projects, capabilities, and user identity.
-
-Now with logging, audit logging, and error handling.
+Now stores its state as MemoryRecords in the secure memory store,
+making it queryable, auditable, and persistent.
 """
 
 import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-from pydantic import BaseModel, Field
+from src.core.models import MemoryRecord, MemoryStage
 
-# Secure components (injected for audit logging)
 try:
     from memory.secure_store import SecureMemoryStore
 except ImportError:
     SecureMemoryStore = None
 
-try:
-    from core.secure_runner import SecureCommandRunner
-except ImportError:
-    SecureCommandRunner = None
-
-# Logger
 logger = logging.getLogger(__name__)
-
-
-class DigitalTwinState(BaseModel):
-    """
-    Represents the entire state of the Digital Twin.
-    """
-    user_identity: Dict[str, Any] = Field(default_factory=dict)
-    active_projects: List[str] = Field(default_factory=list)
-    current_goals: List[str] = Field(default_factory=list)
-    hardware_status: Dict[str, Any] = Field(default_factory=dict)
-    software_environment: Dict[str, Any] = Field(default_factory=dict)
-    available_capabilities: List[str] = Field(default_factory=list)
-    running_tasks_count: int = 0
-    last_updated: datetime = Field(default_factory=datetime.now)
-
-    class Config:
-        extra = "forbid"
 
 
 class DigitalTwin:
     """
-    A continuously evolving internal representation of reality.
-    Allows JARVIS to reason about the world rather than repeatedly rediscover it.
-
-    Now with logging, audit logging, and exception handling.
+    Maintains a continuously evolving representation of the system state.
+    All state changes are stored as MemoryRecords with stage="system_state".
     """
 
     def __init__(self, secure_memory: Optional[SecureMemoryStore] = None):
-        """
-        Initialize the Digital Twin with an empty state.
-
-        Args:
-            secure_memory: Optional SecureMemoryStore for audit logging.
-        """
-        self.state = DigitalTwinState()
         self._secure_memory = secure_memory
-        self._secure_runner = None
+        self._state_cache: Dict[str, Any] = {}   # in‑memory cache for fast access
+        self._last_state_record_id: Optional[int] = None
         logger.info("[DigitalTwin] Initialized.")
 
-    # ---------- Dependency Injection ----------
     def set_secure_memory(self, secure_memory: SecureMemoryStore) -> None:
-        """Inject secure memory for audit logging."""
         self._secure_memory = secure_memory
         logger.info("[DigitalTwin] SecureMemoryStore attached.")
 
-    def set_secure_runner(self, secure_runner: SecureCommandRunner) -> None:
-        """Inject secure command runner (for future use)."""
-        self._secure_runner = secure_runner
-        logger.info("[DigitalTwin] SecureCommandRunner attached.")
-
-    # ---------- State Update Methods ----------
-    def update_hardware(self, info: Dict[str, Any]) -> None:
-        """
-        Update hardware status and log the change.
-        """
-        if not isinstance(info, dict):
-            logger.warning("[DigitalTwin] update_hardware called with non-dict input.")
+    # ---------- Private helpers ----------
+    def _store_state_snapshot(self, state_type: str, data: Dict[str, Any]) -> None:
+        """Store a state snapshot as a MemoryRecord."""
+        if not self._secure_memory:
+            logger.debug("[DigitalTwin] No secure memory – skipping state storage.")
             return
-
-        self.state.hardware_status = info
-        self.state.last_updated = datetime.now()
-        logger.info(f"[DigitalTwin] Hardware status updated: {info.get('cpu_count', '?')} cores, {info.get('ram_total_gb', '?')} GB RAM")
-        self._audit_log("update_hardware", "hardware_status", "SUCCESS", info)
-
-    def update_capabilities(self, capabilities: List[str]) -> None:
-        """
-        Update the list of available capabilities.
-        """
-        if not isinstance(capabilities, list):
-            logger.warning("[DigitalTwin] update_capabilities called with non-list input.")
-            return
-
-        self.state.available_capabilities = capabilities
-        self.state.last_updated = datetime.now()
-        logger.info(f"[DigitalTwin] Capabilities updated: {len(capabilities)} active")
-        self._audit_log("update_capabilities", "available_capabilities", "SUCCESS", {"count": len(capabilities)})
-
-    def add_project(self, project_name: str) -> bool:
-        """
-        Add a new project to the active list if not already present.
-
-        Returns:
-            True if added, False if already existed.
-        """
-        if not project_name or not isinstance(project_name, str):
-            logger.warning("[DigitalTwin] add_project called with invalid project name.")
-            return False
-
-        if project_name in self.state.active_projects:
-            logger.debug(f"[DigitalTwin] Project '{project_name}' already active.")
-            return False
-
-        self.state.active_projects.append(project_name)
-        self.state.last_updated = datetime.now()
-        logger.info(f"[DigitalTwin] Project added: {project_name}")
-        self._audit_log("add_project", project_name, "SUCCESS", {})
-        return True
-
-    def remove_project(self, project_name: str) -> bool:
-        """
-        Remove a project from the active list.
-
-        Returns:
-            True if removed, False if not found.
-        """
-        if not project_name:
-            return False
 
         try:
-            self.state.active_projects.remove(project_name)
-            self.state.last_updated = datetime.now()
-            logger.info(f"[DigitalTwin] Project removed: {project_name}")
-            self._audit_log("remove_project", project_name, "SUCCESS", {})
-            return True
-        except ValueError:
-            logger.debug(f"[DigitalTwin] Project '{project_name}' not found for removal.")
-            return False
+            text = f"SYSTEM_STATE: {state_type} - {data}"
+            metadata = {
+                "type": "system_state",
+                "state_type": state_type,
+                "timestamp": datetime.now().isoformat(),
+                **data,
+            }
+            record_id = self._secure_memory.insert(text, metadata, user_id="system")
+            self._last_state_record_id = record_id
+            logger.debug(f"[DigitalTwin] Stored {state_type} state snapshot (id={record_id})")
+        except Exception as e:
+            logger.warning(f"[DigitalTwin] Failed to store state snapshot: {e}")
 
-    def set_user(self, user_info: Dict[str, Any]) -> None:
-        """
-        Update user identity information.
-        """
-        if not isinstance(user_info, dict):
-            logger.warning("[DigitalTwin] set_user called with non-dict input.")
-            return
+    def _get_latest_state(self, state_type: str) -> Optional[Dict[str, Any]]:
+        """Retrieve the latest state snapshot of a given type from Memory."""
+        if not self._secure_memory:
+            return None
+        try:
+            # Search for the latest record with metadata.type == "system_state" and state_type == state_type
+            results = self._secure_memory.search_by_text("SYSTEM_STATE", limit=10)
+            for r in results:
+                meta = r.get("metadata", {})
+                if meta.get("type") == "system_state" and meta.get("state_type") == state_type:
+                    return meta
+            return None
+        except Exception as e:
+            logger.warning(f"[DigitalTwin] Failed to retrieve state: {e}")
+            return None
 
-        self.state.user_identity = user_info
-        self.state.last_updated = datetime.now()
-        logger.info(f"[DigitalTwin] User identity updated: {user_info.get('name', 'Unknown')}")
-        self._audit_log("set_user", "user_identity", "SUCCESS", user_info)
+    # ---------- Public API ----------
+    def update_hardware(self, hardware_info: Dict[str, Any]) -> None:
+        """Update hardware information and store it in Memory."""
+        self._state_cache["hardware"] = hardware_info
+        self._store_state_snapshot("hardware", hardware_info)
+        logger.info(f"[DigitalTwin] Hardware status updated: {hardware_info.get('cpu_count', '?')} cores, {hardware_info.get('total_ram_gb', '?')} GB RAM")
+
+    def update_capabilities(self, capabilities: List[str]) -> None:
+        """Update the list of available capabilities and store in Memory."""
+        self._state_cache["capabilities"] = capabilities
+        self._store_state_snapshot("capabilities", {"count": len(capabilities), "list": capabilities})
+        logger.info(f"[DigitalTwin] Capabilities updated: {len(capabilities)} active")
 
     def update_environment(self, env_info: Dict[str, Any]) -> None:
-        """
-        Update software environment details (OS, version, etc.).
-        """
-        if not isinstance(env_info, dict):
-            logger.warning("[DigitalTwin] update_environment called with non-dict input.")
-            return
-
-        self.state.software_environment = env_info
-        self.state.last_updated = datetime.now()
+        """Update software environment details and store in Memory."""
+        self._state_cache["environment"] = env_info
+        self._store_state_snapshot("environment", env_info)
         logger.info(f"[DigitalTwin] Software environment updated: {env_info.get('os', 'Unknown')}")
-        self._audit_log("update_environment", "software_environment", "SUCCESS", env_info)
 
-    def set_running_tasks_count(self, count: int) -> None:
-        """
-        Update the number of running tasks.
-        """
-        if not isinstance(count, int) or count < 0:
-            logger.warning(f"[DigitalTwin] Invalid task count: {count}")
-            return
+    def get_hardware(self) -> Dict[str, Any]:
+        """Return the latest hardware state (from cache or Memory)."""
+        if "hardware" in self._state_cache:
+            return self._state_cache["hardware"]
+        result = self._get_latest_state("hardware")
+        if result:
+            self._state_cache["hardware"] = result
+            return result
+        return {}
 
-        self.state.running_tasks_count = count
-        self.state.last_updated = datetime.now()
-        logger.debug(f"[DigitalTwin] Running tasks count: {count}")
+    def get_capabilities(self) -> List[str]:
+        """Return the latest capabilities list (from cache or Memory)."""
+        if "capabilities" in self._state_cache:
+            return self._state_cache["capabilities"]
+        result = self._get_latest_state("capabilities")
+        if result:
+            self._state_cache["capabilities"] = result.get("list", [])
+            return self._state_cache["capabilities"]
+        return []
 
-    # ---------- State Access ----------
-    def get_state(self) -> DigitalTwinState:
-        """
-        Return a copy of the current state.
-        """
-        return self.state.copy()
+    def get_environment(self) -> Dict[str, Any]:
+        """Return the latest environment state (from cache or Memory)."""
+        if "environment" in self._state_cache:
+            return self._state_cache["environment"]
+        result = self._get_latest_state("environment")
+        if result:
+            self._state_cache["environment"] = result
+            return result
+        return {}
 
-    def get_summary(self) -> str:
-        """
-        Return a human-readable summary of the current state.
-        """
-        os_info = self.state.software_environment.get('os', 'Unknown')
-        projects = ', '.join(self.state.active_projects) if self.state.active_projects else 'None'
-        capabilities_count = len(self.state.available_capabilities)
+    def get_summary(self) -> Dict[str, Any]:
+        """Return a summary of the current system state."""
+        return {
+            "hardware": self.get_hardware(),
+            "capabilities": self.get_capabilities(),
+            "environment": self.get_environment(),
+        }
 
-        return (
-            f"Environment: {os_info}\n"
-            f"Active Projects: {projects}\n"
-            f"Capabilities: {capabilities_count} active\n"
-            f"Running Tasks: {self.state.running_tasks_count}\n"
-            f"Last Updated: {self.state.last_updated.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Return the state as a dictionary (for serialization).
-        """
-        return self.state.dict()
-
-    # ---------- Audit Logging ----------
-    def _audit_log(self, action: str, resource: str, status: str, details: Optional[Dict[str, Any]] = None):
-        """Internal audit logging to secure memory."""
-        if self._secure_memory is not None:
-            try:
-                self._secure_memory.insert(
-                    text=f"DIGITAL_TWIN: {action} on {resource} - {status}",
-                    metadata={
-                        "type": "digital_twin_audit",
-                        "action": action,
-                        "resource": resource,
-                        "status": status,
-                        "details": details or {},
-                    },
-                )
-            except Exception as e:
-                logger.warning(f"[DigitalTwin] Failed to audit log: {e}")
-
-    # ---------- Shutdown ----------
     def shutdown(self) -> None:
-        """Clean up resources."""
         logger.info("[DigitalTwin] Shutting down.")
         if self._secure_memory and hasattr(self._secure_memory, 'close'):
             try:
@@ -239,4 +137,4 @@ class DigitalTwin:
             except Exception as e:
                 logger.warning(f"[DigitalTwin] Error closing secure memory: {e}")
         self._secure_memory = None
-        self._secure_runner = None
+        self._state_cache.clear()

@@ -23,8 +23,41 @@ except ImportError:
 from src.core.interfaces import IEventBus
 from src.core.models import Event
 
-# Logger
 logger = logging.getLogger(__name__)
+
+
+class StandardEvents:
+    """Standard event vocabulary for the platform."""
+    # Goal lifecycle
+    GOAL_CREATED = "GoalCreated"
+    GOAL_ACCEPTED = "GoalAccepted"
+    GOAL_COMPLETED = "GoalCompleted"
+    GOAL_ARCHIVED = "GoalArchived"
+
+    # Task lifecycle
+    TASK_PLANNED = "TaskPlanned"
+    TASK_STARTED = "TaskStarted"
+    TASK_COMPLETED = "TaskCompleted"
+    TASK_FAILED = "TaskFailed"
+    TASK_RETRYING = "TaskRetrying"
+    TASK_WAITING = "TaskWaiting"
+
+    # Capability lifecycle
+    CAPABILITY_INVOKED = "CapabilityInvoked"
+    CAPABILITY_COMPLETED = "CapabilityCompleted"
+    CAPABILITY_FAILED = "CapabilityFailed"
+
+    # Memory lifecycle
+    MEMORY_COMMITTED = "MemoryCommitted"
+    MEMORY_REVIEWED = "MemoryReviewed"
+    MEMORY_CONSOLIDATED = "MemoryConsolidated"
+
+    # Platform
+    PLATFORM_STATE_CHANGED = "PlatformStateChanged"
+    REVIEW_COMPLETED = "ReviewCompleted"
+
+    # Planning
+    PLAN_CREATED = "PlanCreated"
 
 
 class EventBus(IEventBus):

@@ -241,7 +241,7 @@ async def get_status(user_id: str = Depends(validate_api_key)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ---------- CHAT ENDPOINT (UPDATED) ----------
+# ---------- CHAT ENDPOINT (UPDATED with robust error handling) ----------
 @app.post("/api/chat")
 async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
     rate_limit(user_id)
@@ -271,14 +271,41 @@ async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
                     return f"Error: {str(e)}", []
 
             result, trace = await anyio.to_thread.run_sync(get_response)
+            logger.info(f"[API] Chat result: {result[:100] if result else 'empty'}...")
+            if not result:
+                result = "I'm sorry, I didn't get a response."
+
+            # Always yield the result
             yield f"data: {result}\n\n"
+
+            # Safely yield trace details if present
             if trace:
                 for entry in trace:
-                    yield f"data: detail: {json.dumps(entry)}\n\n"
+                    try:
+                        # Ensure the entry is JSON serializable
+                        # Convert any non-serializable objects to strings
+                        safe_entry = {}
+                        for k, v in entry.items():
+                            if isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                                safe_entry[k] = v
+                            else:
+                                safe_entry[k] = str(v)
+                        yield f"data: detail: {json.dumps(safe_entry)}\n\n"
+                    except Exception as e:
+                        logger.warning(f"Failed to serialize trace entry: {e}")
+                        # Skip this entry
+
             yield "data: [DONE]\n\n"
+
         except Exception as e:
             logger.error(f"Streaming error: {e}", exc_info=True)
-            yield f"data: Error: {str(e)}\n\n"
+            # Try to send an error message
+            try:
+                yield f"data: Error: {str(e)}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception:
+                # If even that fails, just log and close
+                logger.error("Failed to send error message in stream")
 
     return StreamingResponse(
         event_generator(),

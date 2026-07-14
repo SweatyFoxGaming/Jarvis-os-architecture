@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID, uuid4
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator, confloat, conint, constr
 
 # ---------- Enums ----------
 
+# Formal Execution State Machine
 class ExecutionState(str, Enum):
     """Universal execution lifecycle for all tasks and goals."""
     CREATED = "created"
@@ -17,33 +18,26 @@ class ExecutionState(str, Enum):
     RETRYING = "retrying"
     REVIEWING = "reviewing"
     COMPLETED = "completed"
-    FAILED = "failed"
     ARCHIVED = "archived"
 
     def is_terminal(self) -> bool:
-        return self in (ExecutionState.COMPLETED, ExecutionState.FAILED, ExecutionState.ARCHIVED)
+        return self in (ExecutionState.COMPLETED, ExecutionState.ARCHIVED)
 
     def is_active(self) -> bool:
-        return self not in (ExecutionState.COMPLETED, ExecutionState.FAILED, ExecutionState.ARCHIVED)
-
-
-class TaskStatus(str, Enum):
-    """Legacy task status – kept for backward compatibility during migration."""
-    PENDING = "pending"
-    ASSIGNED = "assigned"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-    def is_terminal(self) -> bool:
-        return self in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED)
-
-    def is_active(self) -> bool:
-        return self in (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
+        return self in (
+            ExecutionState.CREATED,
+            ExecutionState.ACCEPTED,
+            ExecutionState.PLANNED,
+            ExecutionState.READY,
+            ExecutionState.RUNNING,
+            ExecutionState.WAITING,
+            ExecutionState.RETRYING,
+            ExecutionState.REVIEWING,
+        )
 
 
 class PlatformState(str, Enum):
+    """Explicit platform lifecycle states."""
     BOOTING = "booting"
     LOADING = "loading"
     READY = "ready"
@@ -69,13 +63,11 @@ class RiskLevel(int, Enum):
     HIGH = 3
     CRITICAL = 4
 
-    def is_acceptable(self) -> bool:
-        return self <= RiskLevel.MEDIUM
-
 
 # ---------- Budgets ----------
 
 class GoalBudget(BaseModel):
+    """Architectural budget for a Goal."""
     time_budget_sec: int = Field(default=300, ge=0)
     token_budget: int = Field(default=4096, ge=0)
     priority: Priority = Priority.MEDIUM
@@ -89,6 +81,7 @@ class GoalBudget(BaseModel):
 
 
 class ResourceBudget(BaseModel):
+    """Resource limits for a task."""
     cpu_limit: float = Field(default=1.0, ge=0.0, le=100.0)
     ram_limit_mb: int = Field(default=256, ge=0)
     token_limit: int = Field(default=2048, ge=0)
@@ -98,9 +91,10 @@ class ResourceBudget(BaseModel):
         extra = "forbid"
 
 
-# ---------- Goal ----------
+# ---------- Goal (Primary Domain Object) ----------
 
 class Goal(BaseModel):
+    """A Goal represents the user's intent. Everything derives from this."""
     uuid: UUID = Field(default_factory=uuid4)
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., max_length=2000)
@@ -117,6 +111,7 @@ class Goal(BaseModel):
     error_message: Optional[str] = None
 
     def transition_to(self, new_state: ExecutionState) -> None:
+        """Move the goal to a new state with validation."""
         self.state = new_state
         self.updated_at = datetime.now()
         if new_state == ExecutionState.COMPLETED:
@@ -126,14 +121,14 @@ class Goal(BaseModel):
         extra = "forbid"
 
 
-# ---------- Task ----------
+# ---------- Task (Derived from Goal) ----------
 
 class Task(BaseModel):
+    """A Task is a unit of work belonging to a Goal."""
     uuid: UUID = Field(default_factory=uuid4)
     goal_uuid: UUID = Field(..., description="The Goal this task belongs to")
     creator_id: str = Field(..., min_length=1, max_length=100)
     target_capability: str = Field(..., min_length=1, max_length=100)
-    assigned_department_id: Optional[str] = None   # <-- ADDED BACK
     assigned_worker_id: Optional[str] = None
     state: ExecutionState = ExecutionState.CREATED
     progress: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -162,9 +157,10 @@ class Task(BaseModel):
         extra = "forbid"
 
 
-# ---------- Capability ----------
+# ---------- Capability (First-Class Object) ----------
 
 class Capability(BaseModel):
+    """A Capability represents an executable ability of the platform."""
     name: str = Field(..., min_length=1, max_length=100)
     version: str = Field(default="1.0.0", max_length=20)
     purpose: str = Field(..., max_length=500)
@@ -186,9 +182,10 @@ class Capability(BaseModel):
         extra = "forbid"
 
 
-# ---------- Memory ----------
+# ---------- Memory Lifecycle ----------
 
 class MemoryStage(str, Enum):
+    """Formal memory pipeline stages."""
     CONVERSATION = "conversation"
     WORKING = "working"
     EPISODE = "episode"
@@ -199,6 +196,7 @@ class MemoryStage(str, Enum):
 
 
 class MemoryRecord(BaseModel):
+    """A record stored in memory with explicit stage."""
     uuid: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=datetime.now)
     source: str = Field(..., min_length=1, max_length=100)
@@ -226,9 +224,10 @@ class MemoryRecord(BaseModel):
         extra = "forbid"
 
 
-# ---------- Events ----------
+# ---------- Events (Standard Vocabulary) ----------
 
 class Event(BaseModel):
+    """Event on the internal event bus."""
     uuid: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=datetime.now)
     event_type: str = Field(..., min_length=1, max_length=100)

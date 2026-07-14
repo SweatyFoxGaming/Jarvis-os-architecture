@@ -1,66 +1,54 @@
-# JARVIS Cognitive Engine V2 Architecture
+# JARVIS Cognitive Engine V3 Architecture
 
 ## 1. High-Level Overview
-JARVIS V2 is a multi-layered, event-driven cognitive platform designed for Phoenix OS. It separates high-level strategy (CEO) from operational execution (Chief of Staff) and specialized task performance (Departments/Workers).
+JARVIS V3 is a multi‑layer, event‑driven cognitive platform. It is built around five core abstractions: Goal, Task, Capability, Event, and Memory. The architecture separates strategic reasoning (Executive Mind) from deterministic execution (Planner, Scheduler, ChiefOfStaff) and specialised work (Capabilities / Departments).
 
-### Key Layers:
-1. **Executive Layer (CEO & Chief of Staff)**: Strategic intent and operational orchestration.
-2. **Infrastructure Layer (Executive Office)**: Shared services like the Event Bus, Registries, and Hardware Management.
-3. **Departmental Layer**: Independent specialist units (Research, Coding, etc.) following the Manager-Worker pattern.
-4. **Bridge Layer (Synapse)**: Deterministic, secure interface to Phoenix OS.
+## 2. Key Layers
 
-## 2. Core Components
+### Executive Intelligence Layer
+- **Executive Mind**: Creates Goals, interprets user intent, and manages the high‑level conversation.
+- **Executive Board**: Contains reasoning engines (Strategy, Planning, Risk, etc.) that assist the Executive Mind.
 
-### CEO (Chief Executive Officer)
-- Understands user intent and determines high-level goals.
-- Assigns goals to the Chief of Staff.
-- Reviews results and makes final executive decisions.
+### Execution Layer
+- **Planner**: Receives a Goal, queries the Capability Registry, and produces a structured Plan (list of Tasks).
+- **Scheduler (ChiefOfStaff)**: Orders Tasks by priority, resolves dependencies, enforces budgets, and dispatches Tasks to Departments.
+- **State Machine**: Governs the universal lifecycle of all Goals and Tasks (Created → ... → Archived).
+- **Retry Engine**: Handles Task failures according to policies (exponential backoff, max retries).
 
-### Chief of Staff
-- Schedules departments and manages priorities.
-- Monitors progress and handles interruptions.
-- Resolves conflicts between departments.
+### Capability Layer
+- **Capability Registry**: Discovers, versions, and health‑checks all executable abilities.
+- **Tool Registry** (Alias): Provides compatibility with legacy tools, but all new functionality is registered as Capabilities.
+- **Departments** (Research, Coding, System): Provide the concrete execution of capabilities, but they are a communication metaphor.
 
-### Executive Office
-- **Event Bus**: The nervous system. All communication is structured and event-driven.
-- **Registries**: Dynamic discovery of departments and capabilities.
-- **Resource Allocation**: Manages CPU/RAM/Token budgets.
+### Infrastructure Layer
+- **Event Bus**: The nervous system. All communication is structured and event‑driven.
+- **Digital Twin**: Maintains a state snapshot (hardware, capabilities, environment) stored in Memory.
+- **Memory System**: Follows a formal pipeline (Conversation → Working → Episode → Review → Consolidation → Semantic → Archive).
+- **Synapse Interface**: The exclusive, deterministic gateway to the OS. Enforces security policies.
+- **SecurityModule**: Validates paths, commands, and permissions.
+- **SecureMemoryStore**: Stores embeddings, events, and conversations (PostgreSQL with pgvector or SQLite fallback).
 
-### Departments
-- **Manager**: Receives requests from the Executive Office, plans work, and assigns workers.
-- **Workers**: Perform specialized tasks (e.g., Python Worker, Search Worker).
+## 3. Data Flow
+User → Executive Mind → Goal → Planner → Tasks → ChiefOfStaff → Capabilities → Department → Synapse → OS
 
-### Memory System & Knowledge Librarian
-- **Tiered Memory**: Working, Episodic, Semantic, Procedural.
-- **Librarian**: Ensures knowledge quality, deduplication, and contradiction detection.
-
-### Synapse Interface
-- The exclusive, deterministic gateway to the OS. No direct shell/filesystem calls from LLMs.
-
-## 3. Communication Protocol
-All communication uses structured `Task` and `Event` objects.
-- **Task**: Includes UUID, Creator, Department, Priority, Status, Dependencies, Budget.
-- **Event**: Standardized types like `UserIntentReceived`, `TaskCompleted`, `SecurityApproved`.
+Every step emits Events. Results flow back via Events and are stored in Memory.
 
 ## 4. Mermaid Diagram (Internal Reference)
 ```mermaid
 graph TD
-    User((User)) --> CEO[CEO - Strategy]
-    CEO --> COS[Chief of Staff - Execution]
-    COS --> EB[Event Bus]
+    User((User)) --> EM[Executive Mind]
+    EM --> Goal[Goal]
+    Goal --> Planner[Planner]
+    Planner --> Tasks[Tasks]
+    Tasks --> CoS[Chief of Staff (Scheduler)]
+    CoS --> Registry[Capability Registry]
+    Registry --> Dept[Departments]
+    Dept --> Synapse[Synapse Interface]
+    Synapse --> OS[Phoenix OS]
 
-    subgraph "Executive Office"
-        EB
-        REG[Registry]
-        RES[Resource Mgr]
-    end
-
-    EB --> DEPT[Department Manager]
-    DEPT --> WORK[Specialist Workers]
-
-    WORK --> SYN[Synapse Interface]
-    SYN --> OS[Phoenix OS]
-
-    DEPT --> MEM[Memory System]
-    MEM --> LIB[Knowledge Librarian]
-```
+    EM --> EB[Event Bus]
+    Planner --> EB
+    CoS --> EB
+    Dept --> EB
+    EB --> Memory[Memory Pipeline]
+    Memory --> Twin[Digital Twin]
