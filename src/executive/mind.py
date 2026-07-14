@@ -5,40 +5,13 @@ import traceback
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-from uuid import UUID
 
 from src.core.interfaces import ICEO, IChiefOfStaff, IEventBus
-from src.core.models import (
-    Goal, GoalBudget, Task, ExecutionState, Event,
-    Capability, MemoryRecord, MemoryStage, Priority,
-    ResourceBudget, RiskLevel
-)
+from src.core.models import ExecutiveDecision, Goal, Task, Priority, Event, TaskStatus, ExecutionState
 from src.core.digital_twin import DigitalTwin
 from src.executive.board import ExecutiveBoard
 from src.templates import PromptTemplate
 from src.core.tools import ToolRegistry
-from src.execution.planner import Planner
-
-# ---- Executive Functions ----
-from src.executive.state import ExecutiveState
-from src.executive.intent import IntentInterpreter, StructuredIntent
-from src.executive.goals import GoalManager
-from src.executive.strategy import StrategyEngine, SelectedStrategy
-from src.executive.planning import PlanningEngine
-from src.executive.decision import DecisionEngine, DecisionRecord
-from src.executive.delegation import DelegationManager
-from src.executive.review import ReviewEngine
-from src.executive.adaptation import AdaptationEngine
-# ---- End executive imports ----
-
-# ---- Cognitive imports ----
-from src.cognition import (
-    CognitiveWorkspace,
-    CognitiveAssistant,
-    RecallEngine,
-)
-from src.cognition.models import Experience, ExperienceSource, ExperienceType
-# ---- End cognitive imports ----
 
 try:
     from memory.secure_store import SecureMemoryStore
@@ -68,10 +41,6 @@ class ExecutiveMind(ICEO):
         tool_registry: Optional[ToolRegistry] = None,
         secure_memory: Optional[SecureMemoryStore] = None,
         secure_runner: Optional[SecureCommandRunner] = None,
-        cap_registry=None,
-        cognitive_workspace: Optional[CognitiveWorkspace] = None,
-        cognitive_assistant: Optional[CognitiveAssistant] = None,
-        recall_engine: Optional[RecallEngine] = None,
     ):
         self.cos = chief_of_staff
         self.event_bus = event_bus
@@ -82,30 +51,8 @@ class ExecutiveMind(ICEO):
         self._secure_memory = secure_memory
         self._secure_runner = secure_runner
         self.memory = HierarchicalMemory() if secure_memory is None else None
-        self.active_goals: Dict[str, Goal] = {}
-        self.goal_history: List[Goal] = []
+        self.active_goals: List[Goal] = []
         self._embedding_available = False
-
-        # ---- Cognitive Platform components ----
-        self.workspace = cognitive_workspace
-        self.assistant = cognitive_assistant
-        self.recall = recall_engine
-        # ---- End cognitive ----
-
-        # ---- Executive Functions ----
-        self.executive_state = ExecutiveState()
-        self.intent_interpreter = IntentInterpreter(self.engine)
-        self.goal_manager = GoalManager(self.executive_state)
-        self.strategy_engine = StrategyEngine(self.engine)
-        self.planning_engine = PlanningEngine(cap_registry, event_bus) if cap_registry else None
-        self.decision_engine = DecisionEngine()
-        self.delegation_manager = DelegationManager(self.cos)
-        self.review_engine = ReviewEngine()
-        self.adaptation_engine = AdaptationEngine(self.executive_state)
-        # ---- End executive functions ----
-
-        # Initialize Planner (legacy, but kept for compatibility)
-        self.planner = Planner(cap_registry, event_bus) if cap_registry else None
 
         if self._secure_memory and hasattr(self._secure_memory, 'search_semantic'):
             self._embedding_available = True
@@ -113,15 +60,10 @@ class ExecutiveMind(ICEO):
         else:
             logger.warning("[ExecutiveMind] Semantic search not available; falling back to keyword.")
 
-        logger.info(f"[ExecutiveMind] Initialized. "
-                    f"SecureMemory: {secure_memory is not None}, "
+        logger.info(f"[ExecutiveMind] Initialized. SecureMemory: {secure_memory is not None}, "
                     f"Engine: {engine is not None and getattr(engine, 'llm', None) is not None}, "
                     f"ToolRegistry: {tool_registry is not None}, "
-                    f"Planner: {self.planner is not None}, "
-                    f"Workspace: {self.workspace is not None}, "
-                    f"Assistant: {self.assistant is not None}, "
-                    f"Recall: {self.recall is not None}, "
-                    f"Executive functions: {all([self.intent_interpreter, self.goal_manager, self.strategy_engine, self.planning_engine, self.decision_engine, self.delegation_manager, self.review_engine, self.adaptation_engine])}")
+                    f"Semantic Search: {self._embedding_available}")
 
     def set_secure_memory(self, secure_memory: SecureMemoryStore):
         self._secure_memory = secure_memory
@@ -136,46 +78,11 @@ class ExecutiveMind(ICEO):
 
     def set_engine(self, engine):
         self.engine = engine
-        self.intent_interpreter.set_engine(engine)
-        self.strategy_engine.set_engine(engine)
         logger.info("[ExecutiveMind] Engine attached.")
 
     def set_tool_registry(self, tool_registry: ToolRegistry):
         self.tool_registry = tool_registry
         logger.info("[ExecutiveMind] ToolRegistry attached.")
-
-    # ---- Cognitive helper ----
-    def _record_experience(self, content: Any, source: ExperienceSource, exp_type: ExperienceType,
-                           goal_uuid: Optional[str] = None, task_uuid: Optional[str] = None,
-                           user_id: str = "default") -> Optional[Experience]:
-        if not self._secure_memory:
-            return None
-        try:
-            experience = Experience(
-                source=source,
-                type=exp_type,
-                content=content,
-                user_id=user_id,
-                goal_uuid=UUID(goal_uuid) if goal_uuid else None,
-                task_uuid=UUID(task_uuid) if task_uuid else None,
-            )
-            self._secure_memory.insert(
-                text=f"EXPERIENCE: {content}",
-                metadata={
-                    "type": "experience",
-                    "source": source.value,
-                    "experience_type": exp_type.value,
-                    "user_id": user_id,
-                    "goal_uuid": goal_uuid,
-                    "task_uuid": task_uuid,
-                },
-                user_id=user_id,
-            )
-            logger.debug(f"[ExecutiveMind] Recorded experience: {exp_type.value}")
-            return experience
-        except Exception as e:
-            logger.warning(f"[ExecutiveMind] Failed to record experience: {e}")
-            return None
 
     def _get_recent_context(self, query: str = "", limit: int = 1, user_id: str = "default") -> str:
         if not self._secure_memory:
@@ -247,35 +154,33 @@ class ExecutiveMind(ICEO):
         for name, params_str in matches:
             try:
                 params = json.loads(params_str) if params_str else {}
+                tool_calls.append({"name": name, "params": params})
             except json.JSONDecodeError:
-                logger.warning(f"Failed to parse JSON params: {params_str}. Using empty dict.")
-                params = {}
-            tool_calls.append({"name": name, "params": params})
+                logger.warning(f"Failed to parse tool params: {params_str}")
         return tool_calls
 
-    def _execute_tools(self, tool_calls: List[Dict[str, Any]], goal_uuid: Optional[str] = None) -> Dict[str, Any]:
+    def _execute_tools(self, tool_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not self.tool_registry:
             return {"error": "Tool registry not initialized"}
         results = {}
         for call in tool_calls:
             tool_name = call.get("name")
             params = call.get("params", {})
-            if goal_uuid:
-                params["_goal_uuid"] = goal_uuid
             result = self.tool_registry.execute_tool(tool_name, params)
             results[tool_name] = result
         return results
 
-    def _build_react_prompt(self, messages: List[Dict[str, str]], tools_desc: str) -> str:
-        system_prompt = PromptTemplate.get_system_prompt()
-        lines = [system_prompt]
+    def _build_react_prompt(self, messages: List[Dict[str, str]], tools_desc: str, system_prompt: Optional[str] = None) -> str:
+        # Use provided system_prompt, else fallback to default
+        if system_prompt:
+            lines = [system_prompt]
+        else:
+            lines = [PromptTemplate.get_system_prompt()]
         if tools_desc:
             lines.append("\n" + tools_desc)
             lines.append("\nIMPORTANT:")
             lines.append('- To use a tool, respond with:')
             lines.append('  <tool_call name="tool_name" params=\'{"param1": "value1"}\' />')
-            lines.append('- Use a real example:')
-            lines.append('  <tool_call name="research_specialist" params=\'{"objective": "latest AI trends"}\' />')
             lines.append("- You can use multiple tool calls in one response.")
             lines.append("- After receiving tool results, decide if you need more tools or can finalize.")
             lines.append("- To finalize, respond without a tool call.")
@@ -296,57 +201,14 @@ class ExecutiveMind(ICEO):
         lines.append("\nJARVIS:")
         return "\n".join(lines)
 
-    # ---------- Public Methods ----------
-    def create_goal(self, title: str, description: str, user_id: str = "default", budget: Optional[GoalBudget] = None) -> Goal:
-        goal = Goal(
-            title=title,
-            description=description,
-            user_id=user_id,
-            budget=budget or GoalBudget(priority=Priority.MEDIUM),
-        )
-        self.goal_manager.create_goal_from_intent(
-            {"outcome": title, "urgency": "medium"},
-            user_id,
-            budget
-        )
-        # The goal_manager already adds it to state, but we keep our own references for compatibility
-        self.active_goals[str(goal.uuid)] = goal
-        self.event_bus.publish(Event(
-            event_type="GoalCreated",
-            source="ExecutiveMind",
-            payload={"goal_id": str(goal.uuid), "title": title}
-        ))
-        logger.info(f"[ExecutiveMind] Goal created: {title} ({goal.uuid})")
-        return goal
-
-    def get_goal(self, goal_id: str) -> Optional[Goal]:
-        return self.goal_manager.get_goal(goal_id)
-
-    def complete_goal(self, goal_id: str, summary: str = None) -> bool:
-        goal = self.goal_manager.get_goal(goal_id)
-        if not goal:
-            return False
-        self.goal_manager.update_goal_state(goal_id, ExecutionState.COMPLETED)
-        goal.result_summary = summary
-        # Clean up from our own active list for backward compatibility
-        if goal_id in self.active_goals:
-            del self.active_goals[goal_id]
-        self.goal_history.append(goal)
-        self.event_bus.publish(Event(
-            event_type="GoalCompleted",
-            source="ExecutiveMind",
-            payload={"goal_id": goal_id, "summary": summary}
-        ))
-        logger.info(f"[ExecutiveMind] Goal completed: {goal_id}")
-        return True
-
     # ---------- Main Process Request ----------
     def process_request(
         self,
         user_input: str,
         user_id: str = "default",
         collect_trace: bool = True,
-        force_agent: bool = False
+        force_agent: bool = False,
+        system_prompt: Optional[str] = None,
     ) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
         trace = [] if collect_trace else None
         logger.info(f"[ExecutiveMind] Processing for user {user_id}: {user_input[:80]}...")
@@ -370,18 +232,12 @@ class ExecutiveMind(ICEO):
                     response = "Hello! Good to see you again. What can I do for you?"
                     add_trace("fast_path", "Direct greeting response", {"greeting": True})
                     self._store_conversation(user_input, response, user_id)
-                    if self.workspace:
-                        self.workspace.add_conversation_entry("user", user_input)
-                        self.workspace.add_conversation_entry("assistant", response)
                     return response, trace
 
                 if "how are you" in lower or "status" in lower:
                     response = "I'm doing well, thanks for asking. Ready to help."
                     add_trace("fast_path", "Status response", {"status": "ok"})
                     self._store_conversation(user_input, response, user_id)
-                    if self.workspace:
-                        self.workspace.add_conversation_entry("user", user_input)
-                        self.workspace.add_conversation_entry("assistant", response)
                     return response, trace
 
                 if "time" in lower and len(user_input.split()) < 5:
@@ -389,153 +245,151 @@ class ExecutiveMind(ICEO):
                     response = f"The current time is {dt.now().strftime('%I:%M %p')}."
                     add_trace("fast_path", "Time response", {"time": response})
                     self._store_conversation(user_input, response, user_id)
-                    if self.workspace:
-                        self.workspace.add_conversation_entry("user", user_input)
-                        self.workspace.add_conversation_entry("assistant", response)
                     return response, trace
 
-            # ---- DIRECT EXECUTION: execute: ... ----
+            # ---- DIRECT COMMANDS (Executive Model Path) ----
+            # 1. EXECUTE: ...
             if "execute:" in lower or "system_control" in lower:
                 import re
                 cmd_match = re.search(r'(?:execute|system_control)[\s:]+(.+)', user_input, re.IGNORECASE)
                 if cmd_match:
                     command = cmd_match.group(1).strip()
-                    if self.tool_registry:
-                        result = self.tool_registry.execute_tool(
-                            "system_control",
-                            {"action": "execute", "command": command, "_goal_uuid": str(self.goal_manager.get_all_active_goals()[0].uuid) if self.goal_manager.get_all_active_goals() else None}
+                    add_trace("direct_command", "Creating Executive Goal for execute", {"command": command})
+                    try:
+                        goal = Goal(
+                            title="Execute System Command",
+                            description=command,
+                            user_id=user_id,
                         )
-                        if result.get("success"):
-                            output = result.get('result', {}).get('output', '')
+                        task = Task(
+                            goal_uuid=goal.uuid,
+                            creator_id=user_id,
+                            target_capability="system_control",
+                            input_data={"action": "execute", "command": command},
+                        )
+                        result = self.cos.schedule_task(task)
+                        if isinstance(result, dict) and result.get("output"):
+                            output = result["output"]
                             response = f"✅ Command executed.\nOutput:\n{output}"
+                        elif isinstance(result, dict) and "error" in result:
+                            response = f"❌ Command failed.\nError: {result['error']}"
                         else:
-                            response = f"❌ Command failed.\nError: {result.get('error', 'Unknown error')}"
-                        add_trace("direct_execution", "Direct system_control execution", {"command": command})
+                            response = f"✅ Command executed.\nResult:\n{str(result)}"
+                        add_trace("executive_success", "Task executed successfully", {"result_preview": response[:200]})
                         self._store_conversation(user_input, response, user_id)
-                        if self.workspace:
-                            self.workspace.add_conversation_entry("user", user_input)
-                            self.workspace.add_conversation_entry("assistant", response)
-                            self.workspace.add_capability_result("system_control", result)
                         return response, trace
+                    except Exception as e:
+                        logger.error(f"Executive execution failed: {e}\n{traceback.format_exc()}")
+                        add_trace("executive_error", f"Task failed: {str(e)}", {"error": str(e)})
+                        response = f"❌ Command execution failed: {str(e)}"
+                        self._store_conversation(user_input, response, user_id)
+                        return response, trace
+
+            # 2. RESEARCH INTENT
+            research_keywords = ["research", "find", "search", "look up", "what is", "who is", "tell me about", "explain"]
+            is_research = any(kw in lower for kw in research_keywords)
+            if is_research:
+                add_trace("research_intent", "Creating Executive Goal for research", {"query": user_input})
+                try:
+                    goal = Goal(
+                        title="Research Request",
+                        description=user_input,
+                        user_id=user_id,
+                    )
+                    task = Task(
+                        goal_uuid=goal.uuid,
+                        creator_id=user_id,
+                        target_capability="research_specialist",
+                        input_data={"objective": user_input},
+                    )
+                    result = self.cos.schedule_task(task)
+                    if isinstance(result, str):
+                        response = result
+                    elif isinstance(result, dict) and "result" in result:
+                        response = result["result"]
+                    elif isinstance(result, dict) and "error" in result:
+                        response = f"Research failed: {result['error']}"
                     else:
-                        response = "Tool registry not available."
-                        add_trace("error", "Tool registry missing", {})
-                        self._store_conversation(user_input, response, user_id)
-                        return response, trace
+                        response = str(result)
+                    add_trace("research_success", "Research completed", {"result_preview": response[:200]})
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+                except Exception as e:
+                    logger.error(f"Executive research failed: {e}\n{traceback.format_exc()}")
+                    add_trace("research_error", f"Research failed: {str(e)}", {"error": str(e)})
+                    # Fall through to ReAct
 
-            # ---- Main path: Executive Pipeline ----
-            # 1. Interpret Intent
-            structured_intent = self.intent_interpreter.interpret(user_input, {"user_id": user_id})
-            add_trace("intent", f"Interpreted intent: {structured_intent.outcome[:100]}", {"outcome": structured_intent.outcome, "urgency": structured_intent.urgency})
-
-            # 2. Create Goal from Intent
-            goal = self.goal_manager.create_goal_from_intent(
-                structured_intent.dict(),
-                user_id,
-                GoalBudget(priority=Priority.MEDIUM, time_budget_sec=300, token_budget=4096)
-            )
-            goal_uuid = str(goal.uuid)
-            add_trace("goal_created", f"Goal created: {goal_uuid}", {"goal_id": goal_uuid})
-
-            # 3. Update Cognitive Workspace
-            if self.workspace:
-                self.workspace.set_goal(goal)
-                self.workspace.add_conversation_entry("user", user_input)
-
-            # 4. Record experience
-            self._record_experience(
-                content=user_input,
-                source=ExperienceSource.CONVERSATION,
-                exp_type=ExperienceType.USER_INPUT,
-                goal_uuid=goal_uuid,
-                user_id=user_id
-            )
-
-            # 5. Select Strategy
-            strategy = self.strategy_engine.select_strategy(
-                {"uuid": goal_uuid, "title": goal.title, "description": goal.description}
-            )
-            add_trace("strategy", f"Selected strategy: {strategy.chosen.name}", {"strategy": strategy.chosen.name, "confidence": strategy.confidence})
-
-            # 6. Create Plan
-            if self.planning_engine:
-                tasks = self.planning_engine.create_plan(goal, strategy.chosen.dict())
-                add_trace("planning", f"Created {len(tasks)} tasks", {"task_count": len(tasks)})
-                # Schedule tasks via delegation
-                for task in tasks:
-                    self.delegation_manager.delegate_task(task)
-                    add_trace("delegation", f"Scheduled task {task.uuid} for capability {task.target_capability}", {"task_id": str(task.uuid)})
-            else:
-                # Fallback: use legacy planner (if available)
-                if self.planner:
-                    tasks = self.planner.create_plan(goal)
-                    for task in tasks:
-                        self.cos.schedule_task(task)
-                        add_trace("planning", f"Scheduled task {task.uuid} for capability {task.target_capability}", {"task_id": str(task.uuid)})
-                else:
-                    logger.warning("[ExecutiveMind] No planner available, using LLM direct tool calls.")
-                    tasks = []
-
-            # 7. Make Decision
-            decision = self.decision_engine.make_decision(
-                goal.uuid,
-                [{"plan": [t.dict() for t in tasks], "confidence": strategy.confidence, "risk": "low"}]
-            )
-            if decision:
-                add_trace("decision", f"Decision made with confidence {decision.confidence:.2f}", {"confidence": decision.confidence})
-
-            # 8. Execute (via LLM ReAct) – we still use the LLM for generating the final response
+            # ---- ReAct Loop (Fallback / General Conversation) ----
             if self.engine is not None and getattr(self.engine, 'llm', None) is not None:
-                # (The rest of the LLM ReAct loop remains the same as before)
-                # Use context retrieval and assistant notes as in the earlier version.
-                # I'll include the existing LLM loop code below (it's identical to the previous version)
-                # ...
+                context = self._get_recent_context(query=user_input, limit=2, user_id=user_id)
+                tools_desc = self.tool_registry.list_tools_for_prompt() if self.tool_registry else ""
 
-                # ---- LLM ReAct (same as before) ----
-                # ... (we'll copy the existing LLM loop code here to avoid duplication)
+                messages = [{"role": "user", "content": user_input}]
+                if context and context != "No recent conversation history.":
+                    messages.insert(0, {"role": "system", "content": f"Context:\n{context}"})
+                    add_trace("context_retrieval", "Retrieved recent context", {"context": context[:200]})
 
-                # For brevity, I'll write a placeholder comment; but we need to include the full LLM loop.
-                # Since the user expects complete code, I'll include the full loop.
-                # We'll copy the exact same LLM loop from the previous mind.py.
+                final_answer = None
+                raw_response = ""
+                for iteration in range(1, MAX_TOOL_ITERATIONS + 1):
+                    add_trace("react_iteration", f"Iteration {iteration}/{MAX_TOOL_ITERATIONS}", {"iteration": iteration})
 
-                # I'll assume the full loop is inserted here.
+                    # Build prompt with custom system_prompt if provided
+                    prompt = self._build_react_prompt(messages, tools_desc, system_prompt)
+                    try:
+                        raw_response = self.engine.generate(prompt, max_tokens=512, temperature=0.7)
+                    except Exception as e:
+                        if "context window" in str(e).lower() or "tokens" in str(e).lower():
+                            logger.warning(f"Token limit exceeded in iteration {iteration}: {e}")
+                            response = "I'm sorry, the conversation is too long. Let's start fresh or shorten your request."
+                            add_trace("error", "Token limit exceeded", {"error": str(e)})
+                            self._store_conversation(user_input, response, user_id)
+                            return response, trace
+                        else:
+                            raise
 
-                response = "Hello"  # placeholder
+                    add_trace("llm_response", f"LLM generated response (iteration {iteration})", {"response_preview": raw_response[:200]})
 
-                # But we must include the actual response generation.
+                    tool_calls = self._parse_tool_calls(raw_response)
+                    if not tool_calls:
+                        final_answer = raw_response
+                        add_trace("finalize", "No tool calls, finalizing", {})
+                        break
+
+                    add_trace("tool_calls", f"Executing {len(tool_calls)} tool calls", {"tools": [t["name"] for t in tool_calls]})
+                    tool_results = self._execute_tools(tool_calls)
+                    for tool_name, result in tool_results.items():
+                        add_trace("tool_result", f"Tool '{tool_name}' completed", {"result_preview": str(result)[:200]})
+
+                    messages.append({"role": "assistant", "content": raw_response})
+                    for tool_name, result in tool_results.items():
+                        result_text = json.dumps(result, indent=2) if isinstance(result, dict) else str(result)
+                        messages.append({
+                            "role": "tool_result",
+                            "content": f"Tool '{tool_name}' returned:\n{result_text}"
+                        })
+
+                if final_answer is None:
+                    final_answer = raw_response if raw_response else "I'm sorry, I couldn't complete the task within the allowed steps."
+                    add_trace("fallback", "Used fallback after iteration limit", {})
+
+                response = final_answer
+                add_trace("synthesis", "Final response synthesized", {"response_preview": response[:200]})
 
             else:
-                response = PromptTemplate.format(user_input, "No LLM available.")
-
-            self._store_conversation(user_input, response, user_id)
-            if self.workspace:
-                self.workspace.add_conversation_entry("assistant", response)
-
-            # 9. Record assistant response as experience
-            self._record_experience(
-                content=response,
-                source=ExperienceSource.CONVERSATION,
-                exp_type=ExperienceType.JARVIS_RESPONSE,
-                goal_uuid=goal_uuid,
-                user_id=user_id
-            )
-
-            # 10. Complete Goal
-            self.complete_goal(goal_uuid, "Request processed")
+                # No LLM: fallback to template
+                logger.info("[ExecutiveMind] No LLM available, using template.")
+                context = self._get_recent_context(query=user_input, limit=2, user_id=user_id)
+                response = PromptTemplate.format(user_input, context)
+                add_trace("template_fallback", "Used template response (no LLM)", {})
 
         except Exception as e:
             error_trace = traceback.format_exc()
             logger.error(f"Unexpected error: {e}\n{error_trace}")
             response = "I'm sorry, an unexpected error occurred. Please check the logs."
             add_trace("error", f"Unexpected error: {str(e)}", {"error": str(e)})
-            # Adapt: use adaptation engine to handle the failure
-            if self.adaptation_engine:
-                actions = self.adaptation_engine.handle_task_failure(
-                    Task(goal_uuid=UUID(goal_uuid), creator_id="ExecutiveMind", target_capability="unknown"),
-                    str(e)
-                )
-                add_trace("adaptation", f"Adaptation actions: {actions}", {"actions": actions})
 
+        self._store_conversation(user_input, response, user_id)
         return response, trace
 
     def assess_vision(self):

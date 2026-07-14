@@ -47,12 +47,32 @@ from src.v2_main import CognitiveEngineV3
 from src.memory.knowledge_librarian import KnowledgeLibrarian
 from src.core.user_manager import UserManager
 
+# ---- Interaction Platform ----
+from src.interaction import (
+    InteractionManager,
+    Interaction,
+    InteractionSource,
+    InteractionKind,
+    SessionManager,
+    PersonalityEngine,
+    ConversationEngine,
+    NotificationManager,
+)
+from src.interaction.models import Tone
+
 # ---------- Globals ----------
 _engine = None
 _secure_memory = None
 _librarian = None
 _user_manager = None
 _consolidation_task = None
+
+# Interaction Platform globals
+_interaction_manager = None
+_notification_manager = None
+_session_manager = None
+_personality_engine = None
+_conversation_engine = None
 
 # ---------- API Key Auth ----------
 ADMIN_API_KEY = getattr(AppConfig, 'INTERNAL_API_KEY', None) or os.getenv("INTERNAL_API_KEY", "admin")
@@ -122,6 +142,8 @@ def get_whisper_model():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _engine, _secure_memory, _librarian, _user_manager, _consolidation_task
+    global _interaction_manager, _notification_manager, _session_manager, _personality_engine, _conversation_engine
+
     logger.info("[API] Starting up...")
     try:
         from memory.secure_store import SecureMemoryStore
@@ -138,28 +160,34 @@ async def lifespan(app: FastAPI):
         _librarian = KnowledgeLibrarian(memory, secure_memory=_secure_memory, engine=_engine.engine)
         logger.info("[API] Librarian initialized.")
 
+        # ---- Initialize Interaction Platform ----
+        _session_manager = SessionManager()
+        _personality_engine = PersonalityEngine()
+        _notification_manager = NotificationManager()
+        _conversation_engine = ConversationEngine(_session_manager, _personality_engine, _engine.mind)
+        _interaction_manager = InteractionManager(_session_manager, _conversation_engine, _notification_manager)
+        logger.info("[API] Interaction Platform initialized.")
+
         # ---------- Auto‑consolidation loop ----------
         async def auto_consolidate_loop():
             logger.info("[API] Auto‑consolidation started. Will run every 30 minutes.")
             while True:
-                await asyncio.sleep(1800)  # 30 minutes
+                await asyncio.sleep(1800)
                 if _librarian:
                     try:
                         promoted = _librarian.consolidate_episodes()
                         if promoted > 0:
                             logger.info(f"[API] Auto‑consolidation promoted {promoted} records.")
-                        else:
-                            logger.debug("[API] Auto‑consolidation: no records promoted.")
                     except Exception as e:
                         logger.error(f"[API] Auto‑consolidation error: {e}", exc_info=True)
-                else:
-                    logger.warning("[API] Librarian not available for consolidation.")
 
         _consolidation_task = asyncio.create_task(auto_consolidate_loop())
 
         logger.info("[API] Startup complete.")
     except Exception as e:
         logger.error(f"Startup error: {e}", exc_info=True)
+        # Re-raise to ensure the app doesn't start in a broken state
+        raise
 
     yield
 
@@ -241,71 +269,76 @@ async def get_status(user_id: str = Depends(validate_api_key)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ---------- CHAT ENDPOINT (UPDATED with robust error handling) ----------
+# ---------- CHAT ENDPOINT (with safeguard) ----------
 @app.post("/api/chat")
 async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
-    rate_limit(user_id)
-    if _engine is None:
-        raise HTTPException(503, "Engine not initialized")
+    global _interaction_manager, _session_manager, _personality_engine, _conversation_engine, _notification_manager
 
-    # Detect if we should force agent mode (bypass fast path)
+    rate_limit(user_id)
+
+    # ---- Safeguard: ensure Interaction Platform is initialized ----
+    if _interaction_manager is None:
+        logger.warning("[API] Interaction Platform not initialized. Attempting to initialize...")
+        try:
+            # Re-initialize if needed
+            _session_manager = SessionManager()
+            _personality_engine = PersonalityEngine()
+            _conversation_engine = ConversationEngine(_session_manager, _personality_engine, _engine.mind)
+            _notification_manager = NotificationManager()
+            _interaction_manager = InteractionManager(_session_manager, _conversation_engine, _notification_manager)
+            logger.info("[API] Interaction Platform re‑initialized successfully.")
+        except Exception as e:
+            logger.error(f"[API] Failed to re‑initialize Interaction Platform: {e}", exc_info=True)
+            raise HTTPException(503, "Interaction Platform not available")
+
+    if _interaction_manager is None:
+        raise HTTPException(503, "Interaction Platform not initialized")
+
     msg = request.message.strip()
     force_agent = False
     if msg.startswith('!'):
         force_agent = True
-        msg = msg[1:].strip()  # remove the prefix
+        msg = msg[1:].strip()
     elif any(kw in msg.lower() for kw in ["push", "github", "commit", "deploy", "system_control", "execute"]):
         force_agent = True
 
-    # Use the cleaned message if we stripped '!', else original
     final_message = msg if force_agent and request.message.startswith('!') else request.message
 
+    # Get session UUID for this user
+    session_id = _session_manager.get_session_for_user(user_id)
+
+    # Build Interaction
+    interaction = Interaction(
+        session_id=session_id,
+        source=InteractionSource.WEB,
+        kind=InteractionKind.TEXT,
+        content=final_message,
+        metadata={
+            "user_id": user_id,
+            "force_agent": force_agent,
+        },
+    )
+
+    # Process synchronously for now; later we'll support streaming
+    result = _interaction_manager.handle(interaction)
+    response_text = result.text or result.markdown or "No response."
+
+    # For simplicity, we return a streaming response that just yields the result
     async def event_generator():
-        try:
-            def get_response():
+        yield f"data: {response_text}\n\n"
+        if result.trace:
+            for entry in result.trace:
                 try:
-                    res, trace = _engine.run(final_message, user_id=user_id, force_agent=force_agent)
-                    return res, trace
+                    safe_entry = {}
+                    for k, v in entry.items():
+                        if isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                            safe_entry[k] = v
+                        else:
+                            safe_entry[k] = str(v)
+                    yield f"data: detail: {json.dumps(safe_entry)}\n\n"
                 except Exception as e:
-                    logger.error(f"Engine error: {e}", exc_info=True)
-                    return f"Error: {str(e)}", []
-
-            result, trace = await anyio.to_thread.run_sync(get_response)
-            logger.info(f"[API] Chat result: {result[:100] if result else 'empty'}...")
-            if not result:
-                result = "I'm sorry, I didn't get a response."
-
-            # Always yield the result
-            yield f"data: {result}\n\n"
-
-            # Safely yield trace details if present
-            if trace:
-                for entry in trace:
-                    try:
-                        # Ensure the entry is JSON serializable
-                        # Convert any non-serializable objects to strings
-                        safe_entry = {}
-                        for k, v in entry.items():
-                            if isinstance(v, (dict, list, str, int, float, bool, type(None))):
-                                safe_entry[k] = v
-                            else:
-                                safe_entry[k] = str(v)
-                        yield f"data: detail: {json.dumps(safe_entry)}\n\n"
-                    except Exception as e:
-                        logger.warning(f"Failed to serialize trace entry: {e}")
-                        # Skip this entry
-
-            yield "data: [DONE]\n\n"
-
-        except Exception as e:
-            logger.error(f"Streaming error: {e}", exc_info=True)
-            # Try to send an error message
-            try:
-                yield f"data: Error: {str(e)}\n\n"
-                yield "data: [DONE]\n\n"
-            except Exception:
-                # If even that fails, just log and close
-                logger.error("Failed to send error message in stream")
+                    logger.warning(f"Failed to serialize trace entry: {e}")
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -313,6 +346,7 @@ async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
+# ---------- Other Endpoints (unchanged) ----------
 @app.post("/v1/chat/completions")
 @app.post("/api/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, user_id: str = Depends(validate_api_key)):

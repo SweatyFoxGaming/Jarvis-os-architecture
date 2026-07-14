@@ -83,6 +83,9 @@ from src.executive.adaptation import AdaptationEngine
 from src.bridge.synapse import SynapseInterface
 from src.core.security import SecurityModule
 
+# Import the Brave search function directly
+from src.capabilities.providers.builtin import _brave_search
+
 try:
     from config.secure_config import AppConfig
     AppConfig.load()
@@ -134,7 +137,7 @@ class CognitiveEngineV3:
             tool_registry=None,
         )
 
-        # ---------- Tool Registry (Capability Registry) ----------
+        # ---------- Tool Registry ----------
         self.tool_registry = ToolRegistry(
             chief_of_staff=self.cos,
             cap_registry=self.cap_registry,
@@ -240,10 +243,10 @@ class CognitiveEngineV3:
             asyncio.create_task(self.sleep_scheduler.start())
             logging.info("[V2] Sleep scheduler started.")
 
-    # ---------- Registration Methods with Updated Handlers ----------
+    # ---------- Registration Methods (FULL) ----------
 
     def _register_existing_capabilities(self):
-        # Research
+        # Research – with direct handler
         research_cap = CapabilityDefinition(
             name="research_specialist",
             description="Perform deep factual research and evidence collection on any topic.",
@@ -251,6 +254,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="objective", type="string", description="The topic to research", required=True),
                 CapabilityParameter(name="depth", type="string", description="Research depth: brief, standard, or comprehensive", required=False, enum=["brief", "standard", "comprehensive"]),
             ],
+            handler=_brave_search,
             department="Research",
         )
         self.tool_registry.register(research_cap)
@@ -287,7 +291,6 @@ class CognitiveEngineV3:
 
         # Weather
         def get_weather(**kwargs):
-            # Accept various parameter names
             city = kwargs.get('city') or kwargs.get('location') or "London"
             try:
                 url = f"https://wttr.in/{city}?format=%C+%t&lang=en"
@@ -306,6 +309,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="city", type="string", description="Name of the city", required=True),
             ],
             handler=get_weather,
+            department="System",
         )
         self.tool_registry.register(weather_cap)
 
@@ -350,6 +354,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="content", type="string", description="Content to write (for write_file)", required=False),
             ],
             handler=system_control_handler,
+            department="System",
         )
         self.tool_registry.register(system_cap)
 
@@ -410,6 +415,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="event_id", type="integer", description="Event ID (for remove_event)", required=False),
             ],
             handler=calendar_handler,
+            department="System",
         )
         self.tool_registry.register(calendar_cap)
 
@@ -457,6 +463,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="body", type="string", description="Email body", required=True),
             ],
             handler=email_handler,
+            department="System",
         )
         self.tool_registry.register(email_cap)
 
@@ -576,6 +583,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="email_id", type="string", description="Email ID to read (for 'read' action)", required=False),
             ],
             handler=email_reader_handler,
+            department="System",
         )
         self.tool_registry.register(email_reader_cap)
 
@@ -585,7 +593,6 @@ class CognitiveEngineV3:
 
         def file_manager_handler(**kwargs):
             action = kwargs.get('action')
-            # Accept both 'path' and 'directory'
             path = kwargs.get('path') or kwargs.get('directory')
             content = kwargs.get('content')
 
@@ -645,6 +652,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="content", type="string", description="Content to write (for 'write' action)", required=False),
             ],
             handler=file_manager_handler,
+            department="System",
         )
         self.tool_registry.register(file_manager_cap)
 
@@ -660,6 +668,7 @@ class CognitiveEngineV3:
                     CapabilityParameter(name="action", type="string", description="Action", required=True),
                 ],
                 handler=github_handler,
+                department="System",
             )
             self.tool_registry.register(github_cap)
             return
@@ -761,6 +770,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="files", type="object", description="Dictionary of file_path: new_content (for push)", required=False),
             ],
             handler=github_handler,
+            department="System",
         )
         self.tool_registry.register(github_cap)
 
@@ -817,6 +827,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="output_path", type="string", description="Where to save the audio file", required=False),
             ],
             handler=tts_handler,
+            department="System",
         )
         self.tool_registry.register(tts_cap)
 
@@ -852,6 +863,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="topic", type="string", description="Topic to search for (e.g., technology, business, sports)", required=False),
             ],
             handler=news_handler,
+            department="System",
         )
         self.tool_registry.register(news_cap)
 
@@ -878,7 +890,6 @@ class CognitiveEngineV3:
                 todos = _load_todos()
                 return {"todos": todos}
             elif action == "add":
-                # Accept 'title' or 'task'
                 title = kwargs.get('title') or kwargs.get('task')
                 if not title:
                     return {"error": "Missing 'title'"}
@@ -921,6 +932,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="id", type="integer", description="Todo ID (for 'complete' or 'delete')", required=False),
             ],
             handler=todo_handler,
+            department="System",
         )
         self.tool_registry.register(todo_cap)
 
@@ -1008,6 +1020,7 @@ class CognitiveEngineV3:
                 CapabilityParameter(name="id", type="integer", description="Note ID", required=False),
             ],
             handler=notes_handler,
+            department="System",
         )
         self.tool_registry.register(notes_cap)
 

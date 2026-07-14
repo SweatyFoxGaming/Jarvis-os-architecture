@@ -1,5 +1,6 @@
 import logging
 import traceback
+import time
 from typing import Dict, Any, List, Optional
 
 from src.core.interfaces import IChiefOfStaff, IEventBus
@@ -23,8 +24,7 @@ logger = logging.getLogger(__name__)
 class ChiefOfStaff(IChiefOfStaff):
     """
     Chief of Staff focuses on execution.
-    Transforms executive vision into coordinated action.
-    No cognitive reasoning, purely operational.
+    Now synchronous: executes capabilities and returns results.
     """
 
     def __init__(
@@ -51,7 +51,7 @@ class ChiefOfStaff(IChiefOfStaff):
         try:
             self.event_bus.subscribe("TaskCompleted", self._on_task_completed)
             self.event_bus.subscribe("TaskFailed", self._on_task_failed)
-            logger.info("[CoS] Subscribed to TaskCompleted and TaskFailed events.")
+            logger.info("[CoS] Subscribed to TaskCompleted and TaskFailed events (observability).")
         except Exception as e:
             logger.error(f"[CoS] Failed to subscribe to events: {e}", exc_info=True)
             raise
@@ -70,170 +70,124 @@ class ChiefOfStaff(IChiefOfStaff):
         self._secure_runner = secure_runner
         logger.info("[CoS] SecureCommandRunner attached.")
 
-    # ---------- Core Scheduling ----------
-    def schedule_task(self, task: Task) -> None:
-        """
-        Schedule a task by resolving its capability to a department.
-        Enforces that every Task belongs to a Goal.
-        """
-        logger.info(f"[CoS] Scheduling task {task.uuid}: capability='{task.target_capability}'")
+    def set_tool_registry(self, tool_registry: ToolRegistry):
+        """Inject tool registry after construction."""
+        self.tool_registry = tool_registry
+        logger.info("[CoS] ToolRegistry attached.")
 
-        # ---- Enforce Goal ownership ----
+    # ---------- Core Synchronous Execution ----------
+    def schedule_task(self, task: Task) -> Any:
+        """Execute task synchronously and return result."""
+        logger.info(f"[CoS] Executing task {task.uuid}: capability='{task.target_capability}'")
+
         if not task.goal_uuid:
-            error_msg = f"Task {task.uuid} rejected: missing goal_uuid. Every Task must belong to a Goal."
+            error_msg = f"Task {task.uuid} rejected: missing goal_uuid."
             logger.error(f"[CoS] {error_msg}")
             task.transition_to(ExecutionState.FAILED)
             task.error_message = error_msg
-            self.event_bus.publish(Event(
-                event_type="TaskRejected",
-                source="ChiefOfStaff",
-                payload={
-                    "task_id": str(task.uuid),
-                    "reason": error_msg,
-                    "goal_uuid": str(task.goal_uuid) if task.goal_uuid else None,
-                }
-            ))
-            return
+            self._publish_event("TaskRejected", {"task_id": str(task.uuid), "reason": error_msg})
+            raise ValueError(error_msg)
 
-        logger.info(f"[CoS] Task {task.uuid} belongs to Goal: {task.goal_uuid}")
+        # Extract parameters from input_data
+        params = getattr(task, 'input_data', {})
+        if not params:
+            # Fallback for backward compatibility
+            params = getattr(task, 'parameters', {}) or getattr(task, 'params', {})
+        if not isinstance(params, dict):
+            params = {"objective": str(params)} if params else {}
 
-        try:
-            # Try to find department from the old registry first
-            dept_name = self.cap_registry.find_department(task.target_capability)
+        last_error = None
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            try:
+                # Resolve capability
+                if self.tool_registry:
+                    cap_def = self.tool_registry.get(task.target_capability)
+                    if cap_def:
+                        # If the capability has a direct handler, call it directly
+                        if hasattr(cap_def, 'handler') and cap_def.handler is not None:
+                            logger.info(f"[CoS] Using direct handler for {task.target_capability}")
+                            result = cap_def.handler(**params)
+                            # Ensure result is serializable
+                            task.transition_to(ExecutionState.COMPLETED)
+                            self._publish_event("TaskCompleted", {"task_id": str(task.uuid), "result": result})
+                            self._cleanup_task(task)
+                            return result
+                        else:
+                            # Fallback to the tool registry execution (which may create internal Tasks)
+                            result = self.tool_registry.execute_tool(task.target_capability, params)
+                            task.transition_to(ExecutionState.COMPLETED)
+                            self._publish_event("TaskCompleted", {"task_id": str(task.uuid), "result": result})
+                            self._cleanup_task(task)
+                            return result
 
-            # If not found, try the tool registry (new capabilities)
-            if not dept_name and self.tool_registry:
-                cap_def = self.tool_registry.get(task.target_capability)
-                if cap_def and cap_def.department:
-                    dept_name = cap_def.department
-                    logger.info(f"[CoS] Found capability in tool registry with department: {dept_name}")
+                if self.cap_registry and hasattr(self.cap_registry, 'get_capability'):
+                    capability = self.cap_registry.get_capability(task.target_capability)
+                    if capability and hasattr(capability, 'execute'):
+                        logger.info(f"[CoS] Found in cap_registry: {task.target_capability}")
+                        from src.capabilities.context import ExecutionContext
+                        context = ExecutionContext(extra={"params": params})
+                        result = capability.execute(context)
+                        if isinstance(result, dict) and "result" in result:
+                            result = result["result"]
+                        task.transition_to(ExecutionState.COMPLETED)
+                        self._publish_event("TaskCompleted", {"task_id": str(task.uuid), "result": result})
+                        self._cleanup_task(task)
+                        return result
 
-            if not dept_name:
-                msg = f"Capability '{task.target_capability}' not found in any registry."
+                msg = f"Capability '{task.target_capability}' not found."
                 logger.error(f"[CoS] {msg}")
-                self._escalate_failure(task, msg)
-                return
+                task.transition_to(ExecutionState.FAILED)
+                task.error_message = msg
+                self._publish_event("OperationalEscalation", {"task_id": str(task.uuid), "reason": msg})
+                raise RuntimeError(msg)
 
-            logger.info(f"[CoS] Resolved '{task.target_capability}' → department '{dept_name}'")
-            task.assigned_department_id = dept_name
-            task.transition_to(ExecutionState.ACCEPTED)
+            except Exception as e:
+                last_error = e
+                logger.error(f"[CoS] Task {task.uuid} attempt {attempt} failed: {e}")
+                self._publish_event("TaskFailed", {"task_id": str(task.uuid), "attempt": attempt, "error": str(e)})
 
-            key = str(task.uuid)
-            self.active_tasks[key] = task
-            if key not in self.retries:
-                self.retries[key] = 0
+                if attempt < self.MAX_RETRIES:
+                    logger.info(f"[CoS] Retrying task {task.uuid} in 1 second...")
+                    time.sleep(1)
+                    task.transition_to(ExecutionState.READY)
+                else:
+                    task.transition_to(ExecutionState.FAILED)
+                    task.error_message = str(e)
+                    self._publish_event("OperationalEscalation", {
+                        "task_id": str(task.uuid),
+                        "reason": f"Max retries exceeded: {str(e)}"
+                    })
+                    self._cleanup_task(task)
+                    raise RuntimeError(f"Task {task.uuid} failed after {self.MAX_RETRIES} retries") from e
 
-            self.event_bus.publish(Event(
-                event_type="DepartmentAssigned",
-                source="ChiefOfStaff",
-                payload={"task_id": key, "department": dept_name, "goal_uuid": str(task.goal_uuid)}
-            ))
-            logger.debug(f"[CoS] Task {key} assigned to {dept_name}.")
+        raise RuntimeError(f"Task {task.uuid} failed for unknown reasons.")
 
-        except Exception as e:
-            error_trace = traceback.format_exc()
-            logger.error(f"[CoS] Unexpected error scheduling task {task.uuid}: {e}\n{error_trace}")
-            self._escalate_failure(task, f"Scheduling error: {str(e)}")
-
-    def _escalate_failure(self, task: Task, reason: str):
-        logger.warning(f"[CoS] Escalating failure for task {task.uuid}: {reason}")
-        task.transition_to(ExecutionState.FAILED)
-        task.error_message = reason
-        self.event_bus.publish(Event(
-            event_type="OperationalEscalation",
-            source="ChiefOfStaff",
-            payload={"task_id": str(task.uuid), "reason": reason}
-        ))
+    def _cleanup_task(self, task: Task):
         key = str(task.uuid)
-        if key in self.active_tasks:
-            del self.active_tasks[key]
+        self.active_tasks.pop(key, None)
+        self.retries.pop(key, None)
+
+    def _publish_event(self, event_type: str, payload: Dict[str, Any]):
+        try:
+            self.event_bus.publish(Event(event_type=event_type, source="ChiefOfStaff", payload=payload))
+        except Exception as e:
+            logger.warning(f"[CoS] Failed to publish {event_type}: {e}")
 
     # ---------- Monitoring ----------
     def monitor_progress(self) -> Dict[str, Any]:
         return {
             "active_count": len(self.active_tasks),
-            "tasks": [
-                {
-                    "uuid": str(t.uuid),
-                    "goal_uuid": str(t.goal_uuid) if t.goal_uuid else None,
-                    "capability": t.target_capability,
-                    "state": t.state.value,
-                    "progress": t.progress,
-                }
-                for t in self.active_tasks.values()
-            ]
+            "tasks": [{"uuid": str(t.uuid), "state": t.state.value} for t in self.active_tasks.values()]
         }
 
-    # ---------- Event Handlers ----------
+    # ---------- Event Handlers (observability) ----------
     def _on_task_completed(self, event: Event):
-        task_id = event.payload.get("task_id")
-        if not task_id:
-            logger.warning("[CoS] TaskCompleted event missing 'task_id' payload.")
-            return
-
-        if task_id in self.active_tasks:
-            logger.info(f"[CoS] Task {task_id} marked as COMPLETED.")
-            self.active_tasks[task_id].transition_to(ExecutionState.COMPLETED)
-            del self.active_tasks[task_id]
-            if task_id in self.retries:
-                del self.retries[task_id]
+        pass  # already handled synchronously
 
     def _on_task_failed(self, event: Event):
-        task_id = event.payload.get("task_id")
-        if not task_id:
-            logger.warning("[CoS] TaskFailed event missing 'task_id' payload.")
-            return
+        pass
 
-        if task_id not in self.active_tasks:
-            logger.debug(f"[CoS] Task {task_id} not in active list.")
-            return
-
-        current_retries = self.retries.get(task_id, 0) + 1
-        self.retries[task_id] = current_retries
-        task = self.active_tasks[task_id]
-
-        if current_retries <= self.MAX_RETRIES:
-            logger.info(f"[CoS] Task {task_id} failed (attempt {current_retries}/{self.MAX_RETRIES}). Retrying...")
-            task.transition_to(ExecutionState.READY)
-            dept_name = task.assigned_department_id
-            if dept_name:
-                self.event_bus.publish(Event(
-                    event_type="DepartmentAssigned",
-                    source="ChiefOfStaff",
-                    payload={
-                        "task_id": task_id,
-                        "department": dept_name,
-                        "retry": current_retries,
-                        "goal_uuid": str(task.goal_uuid) if task.goal_uuid else None,
-                    }
-                ))
-            else:
-                dept_name = self.cap_registry.find_department(task.target_capability)
-                if dept_name:
-                    task.assigned_department_id = dept_name
-                    self.event_bus.publish(Event(
-                        event_type="DepartmentAssigned",
-                        source="ChiefOfStaff",
-                        payload={
-                            "task_id": task_id,
-                            "department": dept_name,
-                            "retry": current_retries,
-                            "goal_uuid": str(task.goal_uuid) if task.goal_uuid else None,
-                        }
-                    ))
-                else:
-                    self._escalate_failure(task, f"Retry failed: capability '{task.target_capability}' still unresolved.")
-        else:
-            logger.error(f"[CoS] Task {task_id} failed after {self.MAX_RETRIES} retries. Escalating.")
-            self._escalate_failure(task, f"Max retries ({self.MAX_RETRIES}) exceeded.")
-
-    # ---------- Shutdown ----------
     def shutdown(self):
         logger.info("[CoS] Shutting down.")
-        try:
-            self.event_bus.unsubscribe("TaskCompleted", self._on_task_completed)
-            self.event_bus.unsubscribe("TaskFailed", self._on_task_failed)
-        except Exception as e:
-            logger.warning(f"[CoS] Error unsubscribing: {e}")
         self.active_tasks.clear()
         self.retries.clear()
