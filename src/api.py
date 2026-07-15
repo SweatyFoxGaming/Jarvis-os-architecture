@@ -65,6 +65,10 @@ from src.interaction.models import Tone, NotificationType
 # ---- Voice Engine ----
 from src.voice import VoiceFactory
 
+# ---- Ecosystem SDK & Validation ----
+from src.ecosystem.sdk import PluginSDK
+from src.ecosystem.validation import PluginValidator
+
 # ---------- Globals ----------
 _engine = None
 _secure_memory = None
@@ -741,6 +745,82 @@ async def ecosystem_marketplace_search(
         raise HTTPException(503, "Ecosystem Platform not initialized")
     results = _engine.ecosystem.marketplace_search(query)
     return {"results": [r.model_dump(mode='json') for r in results]}
+
+@app.post("/api/ecosystem/plugins/{plugin_id}/sandbox/test")
+async def ecosystem_sandbox_test(
+    plugin_id: str,
+    permission: str = Query(..., description="Permission to test (filesystem, network, etc.)"),
+    user_id: str = Depends(validate_api_key),
+):
+    """Test if a plugin has a specific permission."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    sandbox = _engine.ecosystem.get_sandbox(plugin_id)
+    if not sandbox:
+        raise HTTPException(404, "Plugin not found or not active")
+    try:
+        # Convert permission string to enum
+        perm = PluginPermission(permission)
+        sandbox.require(perm)
+        return {"has_permission": True, "permission": permission}
+    except PermissionDenied:
+        return {"has_permission": False, "permission": permission}
+    except ValueError:
+        raise HTTPException(400, f"Invalid permission: {permission}")
+
+# ---------- SDK ENDPOINTS ----------
+
+@app.post("/api/ecosystem/sdk/template")
+async def ecosystem_create_template(
+    name: str = Query(...),
+    author: str = Query("Jarvis Developer"),
+    version: str = Query("1.0.0"),
+    description: str = Query(""),
+    user_id: str = Depends(validate_api_key),
+):
+    """Create a new plugin template."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    sdk = PluginSDK()
+    success = sdk.create_template(name, author, version, description)
+    if not success:
+        raise HTTPException(400, "Plugin already exists or invalid name")
+    return {"status": "created", "name": name}
+
+@app.get("/api/ecosystem/sdk/validate")
+async def ecosystem_validate_plugins(user_id: str = Depends(validate_api_key)):
+    """Validate all plugins."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    validator = PluginValidator()
+    results = validator.validate_all()
+    return {"results": results}
+
+# ---------- MARKETPLACE ENDPOINTS ----------
+
+@app.get("/api/ecosystem/marketplace/search")
+async def ecosystem_marketplace_search(
+    query: str = Query(""),
+    user_id: str = Depends(validate_api_key),
+):
+    """Search the marketplace for plugins."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    results = _engine.ecosystem.marketplace_search(query)
+    return {"results": [r.model_dump(mode='json') for r in results]}
+
+@app.post("/api/ecosystem/marketplace/install")
+async def ecosystem_marketplace_install(
+    plugin_id: str = Query(...),
+    user_id: str = Depends(validate_api_key),
+):
+    """Install a plugin from the marketplace by ID."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    success = _engine.ecosystem.marketplace_install(plugin_id)
+    if not success:
+        raise HTTPException(400, "Failed to install plugin from marketplace")
+    return {"status": "installed", "plugin_id": plugin_id}
 
 # ---------- Other Endpoints ----------
 @app.post("/v1/chat/completions")

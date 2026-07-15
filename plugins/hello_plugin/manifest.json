@@ -1,0 +1,7 @@
+{
+    "name": "hello_plugin",
+    "version": "1.0.0",
+    "description": "A simple test plugin",
+    "author": "Jarvis Team",
+    "jarvis_version": "1.0.0"
+}
