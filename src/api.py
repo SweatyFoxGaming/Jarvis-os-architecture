@@ -1,7 +1,7 @@
 """
 JARVIS Cognitive API V3 – Full API with user management, trace details,
 public model list, governance, voice transcription (Whisper), TTS proxy,
-auto-consolidation, favicon, and Evolution Platform.
+auto-consolidation, favicon, and all platforms.
 """
 
 import os
@@ -637,6 +637,110 @@ async def evolution_update_goal_progress(
     if not result:
         raise HTTPException(404, "Goal not found")
     return {"goal": result}
+
+# ---------- ECOSYSTEM ENDPOINTS ----------
+
+@app.get("/api/ecosystem/discover")
+async def ecosystem_discover(user_id: str = Depends(validate_api_key)):
+    """Discover new plugins."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    discovered = _engine.ecosystem.discover()
+    return {"discovered": [d.model_dump(mode='json') for d in discovered]}
+
+@app.post("/api/ecosystem/install")
+async def ecosystem_install(
+    name: str = Query(...),
+    version: str = Query("1.0.0"),
+    description: str = Query(""),
+    author: str = Query("Unknown"),
+    user_id: str = Depends(validate_api_key),
+):
+    """Install a plugin."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    manifest = _engine.ecosystem.install(name, version, description, author)
+    return {"plugin": manifest.model_dump(mode='json')}
+
+@app.post("/api/ecosystem/plugins/{plugin_id}/activate")
+async def ecosystem_activate_plugin(
+    plugin_id: str,
+    user_id: str = Depends(validate_api_key),
+):
+    """Activate a plugin."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    result = _engine.ecosystem.activate(plugin_id)
+    if not result:
+        raise HTTPException(400, "Plugin activation failed")
+    return {"status": "activated"}
+
+@app.post("/api/ecosystem/plugins/{plugin_id}/deactivate")
+async def ecosystem_deactivate_plugin(
+    plugin_id: str,
+    user_id: str = Depends(validate_api_key),
+):
+    """Deactivate a plugin."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    result = _engine.ecosystem.deactivate(plugin_id)
+    if not result:
+        raise HTTPException(400, "Plugin deactivation failed")
+    return {"status": "deactivated"}
+
+@app.delete("/api/ecosystem/plugins/{plugin_id}")
+async def ecosystem_remove_plugin(
+    plugin_id: str,
+    user_id: str = Depends(validate_api_key),
+):
+    """Remove a plugin."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    result = _engine.ecosystem.remove(plugin_id)
+    if not result:
+        raise HTTPException(404, "Plugin not found")
+    return {"status": "removed"}
+
+@app.get("/api/ecosystem/plugins")
+async def ecosystem_list_plugins(
+    state: Optional[str] = Query(None),
+    user_id: str = Depends(validate_api_key),
+):
+    """List installed plugins."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    plugins = _engine.ecosystem.list_plugins(state)
+    return {"plugins": [p.model_dump(mode='json') for p in plugins]}
+
+@app.get("/api/ecosystem/plugins/{plugin_id}/health")
+async def ecosystem_plugin_health(
+    plugin_id: str,
+    user_id: str = Depends(validate_api_key),
+):
+    """Check plugin health."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    health = _engine.ecosystem.health_check(plugin_id)
+    return {"plugin_id": plugin_id, "health": health}
+
+@app.get("/api/ecosystem/health")
+async def ecosystem_health_all(user_id: str = Depends(validate_api_key)):
+    """Health check for all active plugins."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    results = _engine.ecosystem.health_check_all()
+    return {"health": results}
+
+@app.get("/api/ecosystem/marketplace/search")
+async def ecosystem_marketplace_search(
+    query: str = Query(""),
+    user_id: str = Depends(validate_api_key),
+):
+    """Search the marketplace (stub)."""
+    if not _engine or not hasattr(_engine, 'ecosystem'):
+        raise HTTPException(503, "Ecosystem Platform not initialized")
+    results = _engine.ecosystem.marketplace_search(query)
+    return {"results": [r.model_dump(mode='json') for r in results]}
 
 # ---------- Other Endpoints ----------
 @app.post("/v1/chat/completions")

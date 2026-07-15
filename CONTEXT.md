@@ -700,3 +700,45 @@ curl -X POST "http://localhost:8000/api/evolution/recommendations/779c5c22-56bd-
 # Approve a recommendation (replace ID)
 curl -X POST "http://localhost:8000/api/evolution/recommendations/779c5c22-56bd-4877-a5d0-dfb8c444c377/approve" \
   -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"
+
+# Jarvis OS – Project Context (Updated 2026-07-15)
+
+## 🧠 Current Status
+- **Phases 0–X-a Complete** (up to Ecosystem Platform Foundation).
+- **API**: Stable – all endpoints functional.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Main UI**: The Living Mind – graph‑based visualization at `/`.
+- **Classic Chat**: Available at `/chat.html`.
+- **Environment Platform**: Fully implemented.
+- **Evolution Platform**: Complete (all sub‑phases).
+- **Ecosystem Platform**: Foundation in place – plugin discovery, lifecycle, registry, API.
+
+## ✅ Completed Phases
+- **Phase 0–IX**: Complete (Governance, Core Abstractions, Execution, Capability, Cognitive, Executive, Interaction, Environment, Evolution).
+- **Phase X-a**: Ecosystem Platform Foundation:
+  - Plugin Registry
+  - Discovery Engine
+  - Lifecycle Manager
+  - Health monitoring
+  - API endpoints for install, activate, deactivate, remove, list, health
+
+## 🚀 Next Phase: X-b (SDK)
+Developer toolkit, interfaces, templates, testing framework.
+
+## 🧪 Test Commands
+```bash
+# Discover plugins
+curl -X POST http://localhost:8000/api/ecosystem/discover \
+  -H "X-API-Key: ..."
+
+# Install a plugin
+curl -X POST "http://localhost:8000/api/ecosystem/install?name=my_plugin&version=1.0.0" \
+  -H "X-API-Key: ..."
+
+# List plugins
+curl -X GET "http://localhost:8000/api/ecosystem/plugins" \
+  -H "X-API-Key: ..."
+
+# Activate plugin
+curl -X POST "http://localhost:8000/api/ecosystem/plugins/123/activate" \
+  -H "X-API-Key: ..."

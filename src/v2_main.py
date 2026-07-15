@@ -90,6 +90,9 @@ from src.environment.providers.local_hardware import LocalHardwareProvider
 # ---- Evolution Platform ----
 from src.evolution import EvolutionManager
 
+# ---- Ecosystem Platform ----
+from src.ecosystem import EcosystemManager
+
 # System Control imports
 from src.bridge.synapse import SynapseInterface
 from src.core.security import SecurityModule
@@ -222,6 +225,15 @@ class CognitiveEngineV3:
             event_bus=self.event_bus,
         )
         logging.info("✅ Evolution Platform initialized.")
+
+        # ---------- Ecosystem Platform ----------
+        self.ecosystem = EcosystemManager(
+            plugin_path=os.path.join(project_root, "plugins"),
+            event_bus=self.event_bus,
+        )
+        # Discover existing plugins
+        self.ecosystem.discover()
+        logging.info("✅ Ecosystem Platform initialized.")
 
         # ---------- Register Capabilities ----------
         self._register_existing_capabilities()
@@ -999,8 +1011,12 @@ class CognitiveEngineV3:
         if hasattr(self, 'environment'):
             self.environment.shutdown()
         if hasattr(self, 'evolution'):
-            # Nothing to shut down yet
             pass
+        if hasattr(self, 'ecosystem'):
+            # Ecosystem shutdown: deactivate all active plugins
+            for p in self.ecosystem.list_plugins():
+                if p.state == "active":
+                    self.ecosystem.deactivate(str(p.id))
         if self.secure_memory and hasattr(self.secure_memory, 'close'):
             self.secure_memory.close()
         if self.sleep_scheduler:
