@@ -5,6 +5,7 @@ import traceback
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
+from uuid import UUID
 
 from src.core.interfaces import ICEO, IChiefOfStaff, IEventBus
 from src.core.models import ExecutiveDecision, Goal, Task, Priority, Event, TaskStatus, ExecutionState
@@ -53,6 +54,7 @@ class ExecutiveMind(ICEO):
         self.memory = HierarchicalMemory() if secure_memory is None else None
         self.active_goals: List[Goal] = []
         self._embedding_available = False
+        self.session_manager = None
 
         if self._secure_memory and hasattr(self._secure_memory, 'search_semantic'):
             self._embedding_available = True
@@ -83,6 +85,10 @@ class ExecutiveMind(ICEO):
     def set_tool_registry(self, tool_registry: ToolRegistry):
         self.tool_registry = tool_registry
         logger.info("[ExecutiveMind] ToolRegistry attached.")
+
+    def set_session_manager(self, session_manager):
+        self.session_manager = session_manager
+        logger.info("[ExecutiveMind] SessionManager attached.")
 
     def _get_recent_context(self, query: str = "", limit: int = 1, user_id: str = "default") -> str:
         if not self._secure_memory:
@@ -171,7 +177,6 @@ class ExecutiveMind(ICEO):
         return results
 
     def _build_react_prompt(self, messages: List[Dict[str, str]], tools_desc: str, system_prompt: Optional[str] = None) -> str:
-        # Use provided system_prompt, else fallback to default
         if system_prompt:
             lines = [system_prompt]
         else:
@@ -222,17 +227,127 @@ class ExecutiveMind(ICEO):
                     "timestamp": datetime.now().isoformat()
                 })
 
+        session_id = None
+        if self.session_manager is not None:
+            try:
+                session_id = self.session_manager.get_session_for_user(user_id)
+            except Exception as e:
+                logger.warning(f"[ExecutiveMind] Failed to get session_id: {e}")
+
         response = ""
         try:
             lower = user_input.lower().strip()
 
-            # ---- Fast Path: greetings (only if NOT forced) ----
-            if not force_agent:
-                if any(g in lower for g in ["hello", "hi", "hey"]):
-                    response = "Hello! Good to see you again. What can I do for you?"
-                    add_trace("fast_path", "Direct greeting response", {"greeting": True})
+            # ---- DIRECT CAPABILITY EXECUTION (capability: ...) ----
+            if lower.lstrip().startswith("capability:"):
+                # Extract the rest from the original user_input (preserve case for values)
+                prefix_index = user_input.lower().find("capability:")
+                if prefix_index != -1:
+                    rest = user_input[prefix_index + len("capability:"):].strip()
+                else:
+                    rest = user_input[len("capability:"):].strip()
+
+                if not rest:
+                    response = "Error: Missing capability name and parameters."
+                    add_trace("capability_error", "Missing capability details", {})
                     self._store_conversation(user_input, response, user_id)
                     return response, trace
+
+                parts = rest.split(maxsplit=1)
+                tool_name = parts[0]
+                params = {}
+                if len(parts) > 1:
+                    param_parts = parts[1].split()
+                    for p in param_parts:
+                        if '=' in p:
+                            key, value = p.split('=', 1)
+                            if value.lower() == 'true':
+                                value = True
+                            elif value.lower() == 'false':
+                                value = False
+                            elif value.isdigit():
+                                value = int(value)
+                            else:
+                                if value.startswith('"') and value.endswith('"'):
+                                    value = value[1:-1]
+                                elif value.startswith("'") and value.endswith("'"):
+                                    value = value[1:-1]
+                            params[key] = value
+
+                add_trace("capability_direct", f"Direct capability call: {tool_name}", {"params": params})
+
+                if self.tool_registry is None:
+                    response = "Error: Tool registry not available."
+                    add_trace("capability_error", "Tool registry not available", {})
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+
+                try:
+                    result = self.tool_registry.execute_tool(tool_name, params)
+                    if result.get("success"):
+                        response = f"✅ {tool_name} executed.\nResult:\n{result.get('result')}"
+                    else:
+                        response = f"❌ {tool_name} failed.\nError: {result.get('error', 'Unknown error')}"
+                    add_trace("capability_result", "Direct capability executed", {"result_preview": response[:200]})
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+                except Exception as e:
+                    logger.error(f"Direct capability execution failed: {e}\n{traceback.format_exc()}")
+                    response = f"❌ Capability execution failed: {str(e)}"
+                    add_trace("capability_error", f"Direct capability failed: {str(e)}", {"error": str(e)})
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+
+            # ---- DIRECT SYSTEM COMMAND (execute: ...) ----
+            if lower.startswith("execute:"):
+                command = user_input[len("execute:"):].strip()
+                if not command:
+                    response = "Error: Missing command."
+                    add_trace("execute_error", "Missing command", {})
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+
+                add_trace("direct_command", "Creating Executive Goal for execute", {"command": command})
+                try:
+                    goal = Goal(
+                        title="Execute System Command",
+                        description=command,
+                        user_id=user_id,
+                    )
+                    task = Task(
+                        goal_uuid=goal.uuid,
+                        creator_id=user_id,
+                        target_capability="system_control",
+                        input_data={"action": "execute", "command": command},
+                    )
+                    result = self.cos.schedule_task(task, session_id=session_id)
+                    if isinstance(result, dict) and result.get("output"):
+                        output = result["output"]
+                        response = f"✅ Command executed.\nOutput:\n{output}"
+                    elif isinstance(result, dict) and "error" in result:
+                        response = f"❌ Command failed.\nError: {result['error']}"
+                    else:
+                        response = f"✅ Command executed.\nResult:\n{str(result)}"
+                    add_trace("executive_success", "Task executed successfully", {"result_preview": response[:200]})
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+                except Exception as e:
+                    logger.error(f"Executive execution failed: {e}\n{traceback.format_exc()}")
+                    add_trace("executive_error", f"Task failed: {str(e)}", {"error": str(e)})
+                    response = f"❌ Command execution failed: {str(e)}"
+                    self._store_conversation(user_input, response, user_id)
+                    return response, trace
+
+            # ---- Fast Path: greetings and simple queries (only if NOT forced) ----
+            if not force_agent:
+                # Check if the entire input is a greeting or a simple query
+                # Only trigger if the input is short and contains only a greeting
+                if len(user_input.split()) <= 3:
+                    if any(g in lower for g in ["hello", "hi", "hey"]):
+                        response = "Hello! Good to see you again. What can I do for you?"
+                        add_trace("fast_path", "Direct greeting response", {"greeting": True})
+                        self._store_conversation(user_input, response, user_id)
+                        return response, trace
 
                 if "how are you" in lower or "status" in lower:
                     response = "I'm doing well, thanks for asking. Ready to help."
@@ -247,45 +362,7 @@ class ExecutiveMind(ICEO):
                     self._store_conversation(user_input, response, user_id)
                     return response, trace
 
-            # ---- DIRECT COMMANDS (Executive Model Path) ----
-            # 1. EXECUTE: ...
-            if "execute:" in lower or "system_control" in lower:
-                import re
-                cmd_match = re.search(r'(?:execute|system_control)[\s:]+(.+)', user_input, re.IGNORECASE)
-                if cmd_match:
-                    command = cmd_match.group(1).strip()
-                    add_trace("direct_command", "Creating Executive Goal for execute", {"command": command})
-                    try:
-                        goal = Goal(
-                            title="Execute System Command",
-                            description=command,
-                            user_id=user_id,
-                        )
-                        task = Task(
-                            goal_uuid=goal.uuid,
-                            creator_id=user_id,
-                            target_capability="system_control",
-                            input_data={"action": "execute", "command": command},
-                        )
-                        result = self.cos.schedule_task(task)
-                        if isinstance(result, dict) and result.get("output"):
-                            output = result["output"]
-                            response = f"✅ Command executed.\nOutput:\n{output}"
-                        elif isinstance(result, dict) and "error" in result:
-                            response = f"❌ Command failed.\nError: {result['error']}"
-                        else:
-                            response = f"✅ Command executed.\nResult:\n{str(result)}"
-                        add_trace("executive_success", "Task executed successfully", {"result_preview": response[:200]})
-                        self._store_conversation(user_input, response, user_id)
-                        return response, trace
-                    except Exception as e:
-                        logger.error(f"Executive execution failed: {e}\n{traceback.format_exc()}")
-                        add_trace("executive_error", f"Task failed: {str(e)}", {"error": str(e)})
-                        response = f"❌ Command execution failed: {str(e)}"
-                        self._store_conversation(user_input, response, user_id)
-                        return response, trace
-
-            # 2. RESEARCH INTENT
+            # ---- RESEARCH INTENT (auto-detected) ----
             research_keywords = ["research", "find", "search", "look up", "what is", "who is", "tell me about", "explain"]
             is_research = any(kw in lower for kw in research_keywords)
             if is_research:
@@ -302,7 +379,7 @@ class ExecutiveMind(ICEO):
                         target_capability="research_specialist",
                         input_data={"objective": user_input},
                     )
-                    result = self.cos.schedule_task(task)
+                    result = self.cos.schedule_task(task, session_id=session_id)
                     if isinstance(result, str):
                         response = result
                     elif isinstance(result, dict) and "result" in result:
@@ -334,7 +411,6 @@ class ExecutiveMind(ICEO):
                 for iteration in range(1, MAX_TOOL_ITERATIONS + 1):
                     add_trace("react_iteration", f"Iteration {iteration}/{MAX_TOOL_ITERATIONS}", {"iteration": iteration})
 
-                    # Build prompt with custom system_prompt if provided
                     prompt = self._build_react_prompt(messages, tools_desc, system_prompt)
                     try:
                         raw_response = self.engine.generate(prompt, max_tokens=512, temperature=0.7)
@@ -377,7 +453,6 @@ class ExecutiveMind(ICEO):
                 add_trace("synthesis", "Final response synthesized", {"response_preview": response[:200]})
 
             else:
-                # No LLM: fallback to template
                 logger.info("[ExecutiveMind] No LLM available, using template.")
                 context = self._get_recent_context(query=user_input, limit=2, user_id=user_id)
                 response = PromptTemplate.format(user_input, context)

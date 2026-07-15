@@ -2,6 +2,12 @@
 JARVIS Cognitive API V3 – Full API with user management, trace details,
 public model list, governance, voice transcription (Whisper), TTS proxy,
 auto-consolidation, and favicon.
+
+Phase VII-a: Interaction Platform foundation.
+Phase VII-b: Notification SSE endpoints.
+Phase VII-c: Web UI (handled via static/index.html).
+Phase VII-d: Voice Engine Abstraction (Whisper STT, Edge TTS).
+Phase VII-e: Session Persistence to KnowledgeStore.
 """
 
 import os
@@ -11,9 +17,10 @@ import time
 import json
 import asyncio
 import tempfile
-from typing import Optional
+from typing import Optional, List
 from contextlib import asynccontextmanager
 from collections import defaultdict
+from uuid import UUID
 
 import anyio
 import psutil
@@ -25,13 +32,6 @@ from fastapi.responses import JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
-
-# Whisper for transcription
-try:
-    import whisper
-    WHISPER_AVAILABLE = True
-except ImportError:
-    WHISPER_AVAILABLE = False
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -58,7 +58,10 @@ from src.interaction import (
     ConversationEngine,
     NotificationManager,
 )
-from src.interaction.models import Tone
+from src.interaction.models import Tone, NotificationType
+
+# ---- Voice Engine ----
+from src.voice import VoiceFactory
 
 # ---------- Globals ----------
 _engine = None
@@ -74,17 +77,26 @@ _session_manager = None
 _personality_engine = None
 _conversation_engine = None
 
+# Voice Engine globals
+_stt_provider = None
+_tts_provider = None
+
 # ---------- API Key Auth ----------
 ADMIN_API_KEY = getattr(AppConfig, 'INTERNAL_API_KEY', None) or os.getenv("INTERNAL_API_KEY", "admin")
 API_KEY_NAME = "X-API-Key"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)  # allow query param fallback
 
-def validate_api_key(api_key: str = Security(api_key_header)) -> str:
-    if not api_key:
+def validate_api_key(
+    api_key: str = Security(api_key_header),
+    api_key_query: str = Query(None, alias="api_key"),
+) -> str:
+    """Validate API key from header or query parameter."""
+    key = api_key or api_key_query
+    if not key:
         raise HTTPException(status_code=401, detail="Missing API Key")
-    if api_key == ADMIN_API_KEY:
+    if key == ADMIN_API_KEY:
         return "admin"
-    user = _user_manager.get_user_by_api_key(api_key) if _user_manager else None
+    user = _user_manager.get_user_by_api_key(key) if _user_manager else None
     if user:
         return user["username"]
     raise HTTPException(status_code=403, detail="Invalid API Key")
@@ -122,27 +134,15 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = 512
     stream: Optional[bool] = False
 
-# ---------- Whisper Model (lazy load) ----------
-whisper_model = None
-
-def get_whisper_model():
-    global whisper_model
-    if whisper_model is None:
-        if not WHISPER_AVAILABLE:
-            raise RuntimeError("Whisper not installed")
-        try:
-            whisper_model = whisper.load_model("tiny")
-            logger.info("[API] Whisper model loaded (tiny).")
-        except Exception as e:
-            logger.error(f"[API] Whisper load error: {e}")
-            raise
-    return whisper_model
+class MarkReadRequest(BaseModel):
+    notification_id: str
 
 # ---------- Lifespan ----------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _engine, _secure_memory, _librarian, _user_manager, _consolidation_task
     global _interaction_manager, _notification_manager, _session_manager, _personality_engine, _conversation_engine
+    global _stt_provider, _tts_provider
 
     logger.info("[API] Starting up...")
     try:
@@ -161,12 +161,25 @@ async def lifespan(app: FastAPI):
         logger.info("[API] Librarian initialized.")
 
         # ---- Initialize Interaction Platform ----
-        _session_manager = SessionManager()
+        _session_manager = SessionManager(secure_memory=_secure_memory)
         _personality_engine = PersonalityEngine()
-        _notification_manager = NotificationManager()
+        _notification_manager = NotificationManager(event_bus=_engine.event_bus)
         _conversation_engine = ConversationEngine(_session_manager, _personality_engine, _engine.mind)
         _interaction_manager = InteractionManager(_session_manager, _conversation_engine, _notification_manager)
+
+        # ---- Attach session manager to ExecutiveMind ----
+        _engine.mind.set_session_manager(_session_manager)
+
+        # ---- Load sessions from KnowledgeStore ----
+        loaded = _session_manager.load_all_sessions()
+        logger.info(f"[API] Loaded {loaded} sessions from KnowledgeStore.")
+
         logger.info("[API] Interaction Platform initialized.")
+
+        # ---- Voice Engine ----
+        _stt_provider = VoiceFactory.create_stt("whisper", model_name="tiny")
+        _tts_provider = VoiceFactory.create_tts("edge_tts")
+        logger.info("[API] Voice Engine initialized.")
 
         # ---------- Auto‑consolidation loop ----------
         async def auto_consolidate_loop():
@@ -186,8 +199,6 @@ async def lifespan(app: FastAPI):
         logger.info("[API] Startup complete.")
     except Exception as e:
         logger.error(f"Startup error: {e}", exc_info=True)
-        # Re-raise to ensure the app doesn't start in a broken state
-        raise
 
     yield
 
@@ -269,28 +280,10 @@ async def get_status(user_id: str = Depends(validate_api_key)):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ---------- CHAT ENDPOINT (with safeguard) ----------
+# ---------- CHAT ENDPOINT ----------
 @app.post("/api/chat")
 async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
-    global _interaction_manager, _session_manager, _personality_engine, _conversation_engine, _notification_manager
-
     rate_limit(user_id)
-
-    # ---- Safeguard: ensure Interaction Platform is initialized ----
-    if _interaction_manager is None:
-        logger.warning("[API] Interaction Platform not initialized. Attempting to initialize...")
-        try:
-            # Re-initialize if needed
-            _session_manager = SessionManager()
-            _personality_engine = PersonalityEngine()
-            _conversation_engine = ConversationEngine(_session_manager, _personality_engine, _engine.mind)
-            _notification_manager = NotificationManager()
-            _interaction_manager = InteractionManager(_session_manager, _conversation_engine, _notification_manager)
-            logger.info("[API] Interaction Platform re‑initialized successfully.")
-        except Exception as e:
-            logger.error(f"[API] Failed to re‑initialize Interaction Platform: {e}", exc_info=True)
-            raise HTTPException(503, "Interaction Platform not available")
-
     if _interaction_manager is None:
         raise HTTPException(503, "Interaction Platform not initialized")
 
@@ -319,11 +312,10 @@ async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
         },
     )
 
-    # Process synchronously for now; later we'll support streaming
+    # Process synchronously
     result = _interaction_manager.handle(interaction)
     response_text = result.text or result.markdown or "No response."
 
-    # For simplicity, we return a streaming response that just yields the result
     async def event_generator():
         yield f"data: {response_text}\n\n"
         if result.trace:
@@ -346,7 +338,126 @@ async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-# ---------- Other Endpoints (unchanged) ----------
+# ---------- NOTIFICATION ENDPOINTS ----------
+@app.get("/api/notifications/stream")
+async def notifications_stream(user_id: str = Depends(validate_api_key)):
+    if _interaction_manager is None:
+        raise HTTPException(503, "Interaction Platform not initialized")
+
+    session_id = _session_manager.get_session_for_user(user_id)
+    queue = _interaction_manager.get_stream_queue(session_id)
+
+    async def event_generator():
+        try:
+            yield f"event: connected\ndata: {json.dumps({'session_id': str(session_id), 'status': 'connected'})}\n\n"
+            while True:
+                try:
+                    notification = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"event: notification\ndata: {json.dumps(notification.model_dump(mode='json'))}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"event: ping\ndata: {json.dumps({'timestamp': time.time()})}\n\n"
+        except asyncio.CancelledError:
+            logger.info(f"[API] SSE client disconnected for session {session_id}")
+        finally:
+            _interaction_manager.remove_stream_queue(session_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+@app.get("/api/notifications")
+async def get_notifications(
+    user_id: str = Depends(validate_api_key),
+    limit: int = Query(50, ge=1, le=200),
+    unread_only: bool = Query(False),
+):
+    if _interaction_manager is None:
+        raise HTTPException(503, "Interaction Platform not initialized")
+    session_id = _session_manager.get_session_for_user(user_id)
+    notifications = _interaction_manager.get_notifications(session_id, unread_only=unread_only, limit=limit)
+    return {
+        "notifications": [n.model_dump(mode='json') for n in notifications],
+        "count": len(notifications),
+        "unread_count": len([n for n in notifications if not n.read]),
+    }
+
+@app.post("/api/notifications/mark_read")
+async def mark_notification_read(
+    request: MarkReadRequest,
+    user_id: str = Depends(validate_api_key),
+):
+    if _interaction_manager is None:
+        raise HTTPException(503, "Interaction Platform not initialized")
+    try:
+        notification_id = UUID(request.notification_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid notification ID")
+    success = _interaction_manager.mark_read(notification_id)
+    if not success:
+        raise HTTPException(404, "Notification not found")
+    return {"status": "success"}
+
+@app.post("/api/notifications/mark_all_read")
+async def mark_all_notifications_read(user_id: str = Depends(validate_api_key)):
+    if _interaction_manager is None:
+        raise HTTPException(503, "Interaction Platform not initialized")
+    session_id = _session_manager.get_session_for_user(user_id)
+    count = _interaction_manager.mark_all_read(session_id)
+    return {"status": "success", "marked_count": count}
+
+# ---------- VOICE ENDPOINTS ----------
+@app.post("/api/transcribe")
+async def transcribe_audio(file: UploadFile = File(...), user_id: str = Depends(validate_api_key)):
+    rate_limit(user_id)
+    if _stt_provider is None:
+        raise HTTPException(503, "STT provider not initialized")
+
+    # Validate format
+    allowed = _stt_provider.get_supported_formats()
+    if file.content_type not in allowed:
+        raise HTTPException(400, f"Unsupported audio format. Supported: {', '.join(allowed)}")
+
+    content = await file.read()
+    try:
+        text = _stt_provider.transcribe(content)
+        return {"text": text}
+    except Exception as e:
+        logger.error(f"Transcription error: {e}", exc_info=True)
+        raise HTTPException(500, f"Transcription error: {str(e)}")
+
+@app.post("/api/tts")
+async def text_to_speech(request: Request, user_id: str = Depends(validate_api_key)):
+    rate_limit(user_id)
+    if _tts_provider is None:
+        raise HTTPException(503, "TTS provider not initialized")
+
+    try:
+        data = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid JSON body")
+
+    text = data.get("input") or data.get("text")
+    if not text:
+        raise HTTPException(400, "Missing 'text' or 'input' field")
+
+    voice = data.get("voice")
+    response_format = data.get("response_format", "mp3")
+    speed = data.get("speed", 1.0)
+
+    try:
+        audio = _tts_provider.synthesize(text=text, voice=voice, response_format=response_format, speed=speed)
+        return Response(content=audio, media_type=f"audio/{response_format}")
+    except Exception as e:
+        logger.error(f"TTS error: {e}", exc_info=True)
+        raise HTTPException(500, f"TTS error: {str(e)}")
+
+# ---------- Other Endpoints ----------
 @app.post("/v1/chat/completions")
 @app.post("/api/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, user_id: str = Depends(validate_api_key)):
@@ -440,64 +551,6 @@ async def consolidation_status(user_id: str = Depends(validate_api_key)):
         "enabled": True,
         "interval_minutes": 30,
     }
-
-# ---------- Voice Transcription ----------
-@app.post("/api/transcribe")
-async def transcribe_audio(file: UploadFile = File(...), user_id: str = Depends(validate_api_key)):
-    rate_limit(user_id)
-    if not WHISPER_AVAILABLE:
-        raise HTTPException(503, "Whisper not installed")
-    allowed_extensions = ('.webm', '.wav', '.mp3', '.m4a', '.flac', '.ogg')
-    if not any(file.filename.lower().endswith(ext) for ext in allowed_extensions):
-        raise HTTPException(400, "Unsupported audio format")
-    suffix = os.path.splitext(file.filename)[1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
-    try:
-        model = get_whisper_model()
-        result = model.transcribe(tmp_path)
-        text = result["text"].strip()
-        os.unlink(tmp_path)
-        return {"text": text}
-    except Exception as e:
-        os.unlink(tmp_path)
-        logger.error(f"Transcription error: {e}", exc_info=True)
-        raise HTTPException(500, f"Transcription error: {str(e)}")
-
-# ---------- TTS Proxy ----------
-@app.post("/api/tts")
-async def text_to_speech(request: Request, user_id: str = Depends(validate_api_key)):
-    rate_limit(user_id)
-    try:
-        data = await request.json()
-    except json.JSONDecodeError:
-        raise HTTPException(400, "Invalid JSON body")
-
-    tts_url = os.getenv("TTS_URL", "http://localhost:5051/v1/audio/speech")
-    tts_api_key = os.getenv("TTS_API_KEY", "your_tts_key")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {tts_api_key}",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(tts_url, json=data, headers=headers)
-            if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail=resp.text)
-            return Response(content=resp.content, media_type=resp.headers.get("content-type", "audio/mpeg"))
-    except httpx.ConnectError:
-        logger.error("TTS service connection error")
-        raise HTTPException(503, "TTS service unavailable")
-    except httpx.TimeoutException:
-        logger.error("TTS service timeout")
-        raise HTTPException(504, "TTS service timeout")
-    except Exception as e:
-        logger.error(f"TTS error: {e}", exc_info=True)
-        raise HTTPException(500, f"TTS error: {str(e)}")
 
 # ---------- Static Files ----------
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
