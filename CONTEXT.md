@@ -515,3 +515,188 @@ curl -X POST http://localhost:8000/api/chat \
 # SSE Notifications
 curl -N -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
   http://localhost:8000/api/notifications/stream
+
+# Jarvis OS – Project Context (Updated 2026-07-15)
+
+## 🧠 Current Status
+- **Phases 0–VII Complete**, **Phase VIII-a (Environment Platform Foundation) Started**.
+- **API**: Stable – all endpoints functional.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Main UI**: The Living Mind – graph‑based visualization at `/`.
+- **Classic Chat**: Available at `/chat.html`.
+- **Environment Platform**: Foundation implemented – `EnvironmentManager`, `LocalFilesystemProvider` registered.
+- **`file_manager` capability**: Migrated to use the Environment Platform.
+- **Other capabilities**: Still using legacy direct methods; will be migrated in Phase VIII‑c/d/e/f.
+
+## ✅ Completed Phases
+- **Phase 0–VI**: Complete (Governance, Core Abstractions, Execution, Capability, Cognitive, Executive).
+- **Phase VII**: Interaction Platform (Foundation, Notifications, UI, Voice, Session Persistence).
+- **Phase VIII‑a**: Environment Platform Foundation
+  - `src/environment/` package structure.
+  - `EnvironmentManager`, `EnvironmentProvider`, domain interfaces.
+  - `LocalFilesystemProvider` implementation.
+  - `file_manager` capability migrated.
+
+## 🚀 Next Steps (Phase VIII)
+- **VIII‑b**: Continue migrating capabilities (Calendar, Email, GitHub, Weather, News) to use Environment Platform.
+- **VIII‑c**: Implement Workspace, Projects, Browser domains.
+- **VIII‑d**: Hardware and Network domains.
+
+---
+
+**Last updated**: 2026-07-15  
+**Status**: Phase VIII‑a complete; ready for VIII‑b.
+
+
+# Jarvis OS – Project Context (Updated 2026-07-15)
+
+## 🧠 Current Status
+- **Phases 0–VIII-c Complete** (up to Workspace Domain).
+- **API**: Stable – all endpoints functional.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Main UI**: The Living Mind – graph‑based visualization at `/`.
+- **Classic Chat**: Available at `/chat.html`.
+- **Environment Platform**: Fully implemented with:
+  - Filesystem Domain (`file_manager`)
+  - Calendar Domain (`calendar`)
+  - Services Domain (`weather`, `news`)
+  - Email Domain (`email`, `email_reader`)
+  - GitHub provider (`github`)
+  - Workspace Domain (`workspace`)
+- **All capabilities** are thin wrappers over the Environment Platform.
+
+## ✅ Completed Phases
+- **Phase 0–VI**: Complete (Governance, Core Abstractions, Execution, Capability, Cognitive, Executive).
+- **Phase VII**: Interaction Platform (Foundation, Notifications, UI, Voice, Session Persistence).
+- **Phase VIII-a**: Environment Platform Foundation.
+- **Phase VIII-b**: Migration of all candidate capabilities (filesystem, calendar, services, email, github).
+- **Phase VIII-c**: Workspace Domain (active window, clipboard, processes, current directory).
+
+## 🚀 Next Phase: VIII-d (Hardware & Network)
+- Device discovery, sensors, battery, network status, terminal integration.
+
+## 🧪 Test Commands
+```bash
+# Research
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "Research the future of AI"}'
+
+# Workspace status
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "capability: workspace action=status"}'
+
+# Execute system command
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "execute: echo Hello from Jarvis"}'
+
+
+# Jarvis OS – Project Context (Updated 2026-07-15)
+
+## 🧠 Current Status
+- **Phases 0–VIII-d Complete** (up to Hardware & Network Domain).
+- **API**: Stable – all endpoints functional.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Main UI**: The Living Mind – graph‑based visualization at `/`.
+- **Classic Chat**: Available at `/chat.html`.
+- **Environment Platform**: Fully implemented with:
+  - Filesystem Domain (`file_manager`)
+  - Calendar Domain (`calendar`)
+  - Services Domain (`weather`, `news`)
+  - Email Domain (`email`, `email_reader`)
+  - GitHub provider (`github`)
+  - Workspace Domain (`workspace`)
+  - Hardware & Network Domain (`hardware`)
+- **All capabilities** are thin wrappers over the Environment Platform.
+
+## ✅ Completed Phases
+- **Phase 0–VI**: Complete (Governance, Core Abstractions, Execution, Capability, Cognitive, Executive).
+- **Phase VII**: Interaction Platform (Foundation, Notifications, UI, Voice, Session Persistence).
+- **Phase VIII-a**: Environment Platform Foundation.
+- **Phase VIII-b**: Migration of all candidate capabilities.
+- **Phase VIII-c**: Workspace Domain.
+- **Phase VIII-d**: Hardware & Network Domain.
+
+## 🚀 Next Phase: IX – Evolution Platform
+Jarvis will be able to analyze its own architecture, suggest improvements, and guide self‑evolution with human approval.
+
+## 🧪 Test Commands
+```bash
+# Hardware status
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "capability: hardware action=status"}'
+
+# Ping
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "capability: hardware action=ping host=google.com"}'
+
+
+# Jarvis OS – Project Context (Updated 2026-07-15)
+
+## 🧠 Current Status
+- **Phases 0–IX-a Complete** (up to Evolution Platform Foundation).
+- **API**: Stable – all endpoints functional.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Main UI**: The Living Mind – graph‑based visualization at `/`.
+- **Classic Chat**: Available at `/chat.html`.
+- **Environment Platform**: Fully implemented with all domains (Filesystem, Calendar, Services, Email, GitHub, Workspace, Hardware & Network).
+- **Evolution Platform**: Foundation in place with:
+  - Architecture Analyzer (layer dependency checks)
+  - Code Quality Analyzer (complexity, documentation, large files)
+  - Recommendation Engine (generates actionable suggestions)
+  - Approval workflow (propose, approve, reject)
+  - REST API endpoints for analysis, recommendation generation, and approval.
+- **All capabilities** are thin wrappers over the Environment Platform.
+
+## ✅ Completed Phases
+- **Phase 0–VI**: Complete (Governance, Core Abstractions, Execution, Capability, Cognitive, Executive).
+- **Phase VII**: Interaction Platform (Foundation, Notifications, UI, Voice, Session Persistence).
+- **Phase VIII**: Environment Platform (all domains + providers).
+- **Phase IX-a**: Evolution Platform Foundation:
+  - `EvolutionManager`
+  - `ArchitectureAnalyzer` (layer violations)
+  - `CodeQualityAnalyzer` (metrics, documentation, complexity)
+  - `RecommendationEngine`
+  - `ApprovalEngine`
+  - Full REST API for analysis and approval workflow.
+
+## 🚀 Next Phase: IX-b (Architecture Analysis Enhancement)
+- More detailed dependency analysis.
+- Circular dependency detection.
+- Governance compliance reporting.
+- Integration with KnowledgeStore for persistent analysis history.
+
+## 🧪 Test Commands
+```bash
+# Run architecture analysis
+curl -X POST http://localhost:8000/api/evolution/analyze/architecture \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"
+
+# Run quality analysis
+curl -X POST http://localhost:8000/api/evolution/analyze/quality \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"
+
+# Generate recommendations
+curl -X POST "http://localhost:8000/api/evolution/recommendations/generate" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"
+
+# List recommendations
+curl -X GET "http://localhost:8000/api/evolution/recommendations" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"
+
+# Propose a recommendation (replace ID)
+curl -X POST "http://localhost:8000/api/evolution/recommendations/779c5c22-56bd-4877-a5d0-dfb8c444c377/propose" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"
+
+# Approve a recommendation (replace ID)
+curl -X POST "http://localhost:8000/api/evolution/recommendations/779c5c22-56bd-4877-a5d0-dfb8c444c377/approve" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918"

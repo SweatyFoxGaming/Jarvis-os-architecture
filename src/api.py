@@ -1,13 +1,7 @@
 """
 JARVIS Cognitive API V3 – Full API with user management, trace details,
 public model list, governance, voice transcription (Whisper), TTS proxy,
-auto-consolidation, and favicon.
-
-Phase VII-a: Interaction Platform foundation.
-Phase VII-b: Notification SSE endpoints.
-Phase VII-c: Web UI (handled via static/index.html).
-Phase VII-d: Voice Engine Abstraction (Whisper STT, Edge TTS).
-Phase VII-e: Session Persistence to KnowledgeStore.
+auto-consolidation, favicon, and Evolution Platform.
 """
 
 import os
@@ -42,6 +36,14 @@ logger = logging.getLogger(__name__)
 
 from config.secure_config import AppConfig
 AppConfig.load()
+
+# ---- Force environment variables for email ----
+os.environ.setdefault('EMAIL_USER', os.getenv('EMAIL_USER', ''))
+os.environ.setdefault('EMAIL_PASSWORD', os.getenv('EMAIL_PASSWORD', ''))
+os.environ.setdefault('EMAIL_HOST', os.getenv('EMAIL_HOST', 'smtp.gmail.com'))
+os.environ.setdefault('EMAIL_PORT', os.getenv('EMAIL_PORT', '587'))
+os.environ.setdefault('IMAP_HOST', os.getenv('IMAP_HOST', 'imap.gmail.com'))
+os.environ.setdefault('IMAP_PORT', os.getenv('IMAP_PORT', '993'))
 
 from src.v2_main import CognitiveEngineV3
 from src.memory.knowledge_librarian import KnowledgeLibrarian
@@ -84,13 +86,12 @@ _tts_provider = None
 # ---------- API Key Auth ----------
 ADMIN_API_KEY = getattr(AppConfig, 'INTERNAL_API_KEY', None) or os.getenv("INTERNAL_API_KEY", "admin")
 API_KEY_NAME = "X-API-Key"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)  # allow query param fallback
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 def validate_api_key(
     api_key: str = Security(api_key_header),
     api_key_query: str = Query(None, alias="api_key"),
 ) -> str:
-    """Validate API key from header or query parameter."""
     key = api_key or api_key_query
     if not key:
         raise HTTPException(status_code=401, detail="Missing API Key")
@@ -160,17 +161,15 @@ async def lifespan(app: FastAPI):
         _librarian = KnowledgeLibrarian(memory, secure_memory=_secure_memory, engine=_engine.engine)
         logger.info("[API] Librarian initialized.")
 
-        # ---- Initialize Interaction Platform ----
+        # ---- Interaction Platform ----
         _session_manager = SessionManager(secure_memory=_secure_memory)
         _personality_engine = PersonalityEngine()
         _notification_manager = NotificationManager(event_bus=_engine.event_bus)
         _conversation_engine = ConversationEngine(_session_manager, _personality_engine, _engine.mind)
         _interaction_manager = InteractionManager(_session_manager, _conversation_engine, _notification_manager)
 
-        # ---- Attach session manager to ExecutiveMind ----
         _engine.mind.set_session_manager(_session_manager)
 
-        # ---- Load sessions from KnowledgeStore ----
         loaded = _session_manager.load_all_sessions()
         logger.info(f"[API] Loaded {loaded} sessions from KnowledgeStore.")
 
@@ -297,10 +296,8 @@ async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
 
     final_message = msg if force_agent and request.message.startswith('!') else request.message
 
-    # Get session UUID for this user
     session_id = _session_manager.get_session_for_user(user_id)
 
-    # Build Interaction
     interaction = Interaction(
         session_id=session_id,
         source=InteractionSource.WEB,
@@ -312,7 +309,6 @@ async def chat(request: ChatRequest, user_id: str = Depends(validate_api_key)):
         },
     )
 
-    # Process synchronously
     result = _interaction_manager.handle(interaction)
     response_text = result.text or result.markdown or "No response."
 
@@ -418,7 +414,6 @@ async def transcribe_audio(file: UploadFile = File(...), user_id: str = Depends(
     if _stt_provider is None:
         raise HTTPException(503, "STT provider not initialized")
 
-    # Validate format
     allowed = _stt_provider.get_supported_formats()
     if file.content_type not in allowed:
         raise HTTPException(400, f"Unsupported audio format. Supported: {', '.join(allowed)}")
@@ -456,6 +451,192 @@ async def text_to_speech(request: Request, user_id: str = Depends(validate_api_k
     except Exception as e:
         logger.error(f"TTS error: {e}", exc_info=True)
         raise HTTPException(500, f"TTS error: {str(e)}")
+
+# ---------- EVOLUTION ENDPOINTS ----------
+
+@app.post("/api/evolution/analyze/architecture")
+async def evolution_analyze_architecture(user_id: str = Depends(validate_api_key)):
+    """Run architecture analysis."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    result = _engine.evolution.analyze_architecture()
+    return result.model_dump(mode='json')
+
+@app.post("/api/evolution/analyze/quality")
+async def evolution_analyze_quality(user_id: str = Depends(validate_api_key)):
+    """Run code quality analysis."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    result = _engine.evolution.analyze_quality()
+    return result.model_dump(mode='json')
+
+@app.post("/api/evolution/analyze/performance")
+async def evolution_analyze_performance(user_id: str = Depends(validate_api_key)):
+    """Run performance analysis."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    result = _engine.evolution.analyze_performance()
+    return result.model_dump(mode='json')
+
+@app.post("/api/evolution/analyze/security")
+async def evolution_analyze_security(user_id: str = Depends(validate_api_key)):
+    """Run security analysis."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    result = _engine.evolution.analyze_security()
+    return result.model_dump(mode='json')
+
+@app.get("/api/evolution/recommendations")
+async def evolution_get_recommendations(
+    state: Optional[str] = Query(None),
+    user_id: str = Depends(validate_api_key),
+):
+    """Get all recommendations, optionally filtered by state."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    recs = _engine.evolution.get_recommendations(state)
+    return {"recommendations": [r.model_dump(mode='json') for r in recs]}
+
+@app.post("/api/evolution/recommendations/generate")
+async def evolution_generate_recommendations(
+    analysis_id: Optional[str] = Query(None),
+    user_id: str = Depends(validate_api_key),
+):
+    """Generate recommendations from analysis results."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    recs = _engine.evolution.generate_recommendations(analysis_id)
+    return {"recommendations": [r.model_dump(mode='json') for r in recs]}
+
+@app.post("/api/evolution/recommendations/{rec_id}/propose")
+async def evolution_propose_recommendation(
+    rec_id: str,
+    user_id: str = Depends(validate_api_key),
+):
+    """Propose a recommendation for approval."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    rec = _engine.evolution.propose(rec_id)
+    if not rec:
+        raise HTTPException(404, "Recommendation not found")
+    return rec.model_dump(mode='json')
+
+@app.post("/api/evolution/recommendations/{rec_id}/approve")
+async def evolution_approve_recommendation(
+    rec_id: str,
+    user_id: str = Depends(validate_api_key),
+):
+    """Approve a recommendation."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    rec = _engine.evolution.approve(rec_id)
+    if not rec:
+        raise HTTPException(404, "Recommendation not found")
+    return rec.model_dump(mode='json')
+
+@app.post("/api/evolution/recommendations/{rec_id}/reject")
+async def evolution_reject_recommendation(
+    rec_id: str,
+    reason: Optional[str] = Query(None),
+    user_id: str = Depends(validate_api_key),
+):
+    """Reject a recommendation."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    rec = _engine.evolution.reject(rec_id, reason)
+    if not rec:
+        raise HTTPException(404, "Recommendation not found")
+    return rec.model_dump(mode='json')
+
+@app.get("/api/evolution/analyses")
+async def evolution_get_analyses(user_id: str = Depends(validate_api_key)):
+    """Get all analyses."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    analyses = _engine.evolution.get_analyses()
+    return {"analyses": [a.model_dump(mode='json') for a in analyses]}
+
+@app.get("/api/evolution/dependency-graph")
+async def evolution_get_dependency_graph(user_id: str = Depends(validate_api_key)):
+    """Get the latest dependency graph (JSON)."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    graph = _engine.evolution.get_dependency_graph()
+    if not graph:
+        raise HTTPException(404, "No architecture analysis found; run analysis first.")
+    return graph
+
+@app.get("/api/evolution/dashboard")
+async def evolution_dashboard(user_id: str = Depends(validate_api_key)):
+    """Get the engineering health dashboard."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    recs = _engine.evolution.get_recommendations()
+    report = _engine.evolution.get_dashboard(recs)
+    return report
+
+@app.get("/api/evolution/trends")
+async def evolution_trends(user_id: str = Depends(validate_api_key)):
+    """Get trend report for all metrics."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    return _engine.evolution.get_trend_report()
+
+@app.get("/api/evolution/forecast")
+async def evolution_forecast(
+    horizon_days: int = Query(30, description="Forecast horizon in days"),
+    user_id: str = Depends(validate_api_key),
+):
+    """Get forecast for key metrics."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    return _engine.evolution.get_forecast(horizon_days)
+
+@app.post("/api/evolution/recommendations/prioritize")
+async def evolution_prioritize_recommendations(user_id: str = Depends(validate_api_key)):
+    """Get recommendations sorted by priority."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    recs = _engine.evolution.prioritize_recommendations()
+    return {"recommendations": [r.model_dump(mode='json') for r in recs]}
+
+@app.get("/api/evolution/goals")
+async def evolution_get_goals(
+    status: Optional[str] = Query(None, description="Filter by goal status"),
+    user_id: str = Depends(validate_api_key),
+):
+    """Get engineering goals."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    return {"goals": _engine.evolution.get_goals(status)}
+
+@app.post("/api/evolution/goals")
+async def evolution_create_goal(
+    title: str = Query(...),
+    description: str = Query(...),
+    target_metric: str = Query(...),
+    target_value: float = Query(...),
+    user_id: str = Depends(validate_api_key),
+):
+    """Create a new engineering goal."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    goal = _engine.evolution.create_goal(title, description, target_metric, target_value)
+    return {"goal": goal}
+
+@app.post("/api/evolution/goals/{goal_id}/progress")
+async def evolution_update_goal_progress(
+    goal_id: str,
+    current_value: float = Query(...),
+    user_id: str = Depends(validate_api_key),
+):
+    """Update the current progress of a goal."""
+    if not _engine or not hasattr(_engine, 'evolution'):
+        raise HTTPException(503, "Evolution Platform not initialized")
+    result = _engine.evolution.update_goal_progress(goal_id, current_value)
+    if not result:
+        raise HTTPException(404, "Goal not found")
+    return {"goal": result}
 
 # ---------- Other Endpoints ----------
 @app.post("/v1/chat/completions")

@@ -84,6 +84,11 @@ from src.environment.providers.local_calendar import LocalCalendarProvider
 from src.environment.providers.services import LocalServicesProvider
 from src.environment.providers.local_email import LocalEmailProvider
 from src.environment.providers.local_github import LocalGitHubProvider
+from src.environment.providers.local_workspace import LocalWorkspaceProvider
+from src.environment.providers.local_hardware import LocalHardwareProvider
+
+# ---- Evolution Platform ----
+from src.evolution import EvolutionManager
 
 # System Control imports
 from src.bridge.synapse import SynapseInterface
@@ -152,7 +157,7 @@ class CognitiveEngineV3:
         self.tool_registry.set_event_bus(self.event_bus)
         self.cos.set_tool_registry(self.tool_registry)
 
-        # ---------- Environment Platform (moved earlier) ----------
+        # ---------- Environment Platform ----------
         self.environment = EnvironmentManager(event_bus=self.event_bus)
 
         # Register filesystem provider
@@ -197,7 +202,28 @@ class CognitiveEngineV3:
         self.environment.register_provider("local_github", github_provider)
         logging.info("✅ GitHub provider registered.")
 
-        # ---------- Register Capabilities (now after environment) ----------
+        # Register workspace provider
+        workspace_provider = LocalWorkspaceProvider(
+            secure_memory=self.secure_memory,
+        )
+        self.environment.register_provider("local_workspace", workspace_provider)
+        logging.info("✅ Workspace provider registered.")
+
+        # Register hardware provider
+        hardware_provider = LocalHardwareProvider(
+            secure_memory=self.secure_memory,
+        )
+        self.environment.register_provider("local_hardware", hardware_provider)
+        logging.info("✅ Hardware provider registered.")
+
+        # ---------- Evolution Platform ----------
+        self.evolution = EvolutionManager(
+            root_path=project_root,
+            event_bus=self.event_bus,
+        )
+        logging.info("✅ Evolution Platform initialized.")
+
+        # ---------- Register Capabilities ----------
         self._register_existing_capabilities()
         self._register_calendar_tool()
         self._register_email_tool()
@@ -208,6 +234,8 @@ class CognitiveEngineV3:
         self._register_news_tool()
         self._register_todo_tool()
         self._register_notes_tool()
+        self._register_workspace_tool()
+        self._register_hardware_tool()
 
         logging.info(f"✅ Registered {len(self.tool_registry._capabilities)} capabilities in tool registry.")
 
@@ -844,6 +872,71 @@ class CognitiveEngineV3:
         )
         self.tool_registry.register(notes_cap)
 
+    def _register_workspace_tool(self):
+        """
+        Workspace capability – provides workspace awareness via the Environment Platform.
+        """
+        def workspace_handler(**kwargs):
+            action = kwargs.get('action', 'status')
+            params = {k: v for k, v in kwargs.items() if k != 'action'}
+
+            workspace_provider = self.environment.get_domain_provider(Domain.WORKSPACE)
+            if workspace_provider is None:
+                return {"error": "Workspace provider not available"}
+
+            try:
+                result = workspace_provider.execute(action, params)
+                return result
+            except Exception as e:
+                logger.error(f"Workspace error: {e}", exc_info=True)
+                return {"error": str(e)}
+
+        workspace_cap = CapabilityDefinition(
+            name="workspace",
+            description="Get workspace information (active window, clipboard, processes, etc.).",
+            parameters=[
+                CapabilityParameter(name="action", type="string", description="Action: status, active_window, clipboard, processes, current_directory", required=True,
+                                    enum=["status", "active_window", "clipboard", "processes", "current_directory"]),
+                CapabilityParameter(name="limit", type="integer", description="Limit for processes list", required=False),
+            ],
+            handler=workspace_handler,
+            department="System",
+        )
+        self.tool_registry.register(workspace_cap)
+
+    def _register_hardware_tool(self):
+        """
+        Hardware capability – provides hardware and network info.
+        """
+        def hardware_handler(**kwargs):
+            action = kwargs.get('action', 'status')
+            params = {k: v for k, v in kwargs.items() if k != 'action'}
+
+            hardware_provider = self.environment.get_domain_provider(Domain.HARDWARE)
+            if hardware_provider is None:
+                return {"error": "Hardware provider not available"}
+
+            try:
+                result = hardware_provider.execute(action, params)
+                return result
+            except Exception as e:
+                logger.error(f"Hardware error: {e}", exc_info=True)
+                return {"error": str(e)}
+
+        hardware_cap = CapabilityDefinition(
+            name="hardware",
+            description="Get hardware and network information.",
+            parameters=[
+                CapabilityParameter(name="action", type="string", description="Action: status, cpu, memory, disk, battery, network, ping", required=True,
+                                    enum=["status", "cpu", "memory", "disk", "battery", "network", "ping"]),
+                CapabilityParameter(name="path", type="string", description="Disk path (for disk action)", required=False),
+                CapabilityParameter(name="host", type="string", description="Host to ping", required=False),
+            ],
+            handler=hardware_handler,
+            department="System",
+        )
+        self.tool_registry.register(hardware_cap)
+
     # ---------- Setup ----------
     def _setup(self):
         self.research_dept.initialize(self.event_bus)
@@ -905,6 +998,9 @@ class CognitiveEngineV3:
             self.librarian.shutdown()
         if hasattr(self, 'environment'):
             self.environment.shutdown()
+        if hasattr(self, 'evolution'):
+            # Nothing to shut down yet
+            pass
         if self.secure_memory and hasattr(self.secure_memory, 'close'):
             self.secure_memory.close()
         if self.sleep_scheduler:
