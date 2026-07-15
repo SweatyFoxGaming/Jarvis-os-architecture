@@ -316,3 +316,202 @@ curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
   -d '{"message": "execute: echo Hello from Jarvis"}'
+
+# Jarvis OS – Project Context (Updated 2026-07-14, End of Day)
+
+## 🧠 Current Status
+- **Phases 0–VI Complete**, **Phase VII‑a (Interaction Platform Foundation) Complete**.
+- **API**: Stable – all endpoints functional, including `/api/chat`, `/health`, `/api/transcribe`, `/api/tts`, etc.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Web UI**: Functional at `http://localhost:8000` (basic – to be enhanced in Phase VII‑c).
+- **Interaction Platform**: Fully integrated – `InteractionManager`, `SessionManager`, `PersonalityEngine`, `ConversationEngine`, `NotificationManager` are live.
+- **Research**: ✅ Works via full Executive Model (`Goal` → `Task` → `ChiefOfStaff` → `research_specialist` handler).
+- **Execute**: ✅ Works via full Executive Model (`Goal` → `Task` → `ChiefOfStaff` → `system_control` handler).
+- **Fast‑path**: Greetings and time queries still bypass the Executive for speed.
+- **ReAct Loop**: Functional; tool parameter mismatches are now handled gracefully.
+
+## ✅ Completed Phases
+- **Phase 0**: Governance (Constitution, Development Constitution, Operational Policies, Execution Model).
+- **Phase I**: Architectural Consolidation (Goals, Tasks, Capabilities, Events, Memory).
+- **Phase II**: Core Abstractions (Planner, State Machine, Budgets).
+- **Phase III**: Execution Platform (Scheduler, Retry Engine).
+- **Phase IV**: Capability Platform (Contract, Context, Providers, Registry, Resolver, Execution, Confidence).
+- **Phase V**: Cognitive Platform (Experience, Attention, Workspace, Reflection, Learning, Knowledge, Recall, Cognitive Assistant, Sleep Scheduler).
+- **Phase VI**: Executive Model (Intent, Goals, Strategy, Planning, Decision, Delegation, Review, Adaptation).
+- **Phase VII‑a**: Interaction Platform Foundation:
+  - `InteractionManager` – single entry point for all user input.
+  - `SessionManager` – maps user IDs to UUID sessions; stores conversation history.
+  - `PersonalityEngine` – builds system prompts based on tone (professional, casual, etc.).
+  - `ConversationEngine` – orchestrates dialogue and delegates to the Executive.
+  - `NotificationManager` – in‑memory pub/sub for proactive messages (ready for SSE).
+
+## 🧩 Key Components (Current)
+- **InteractionManager**: Entry point for all interactions (web, voice, API, etc.).
+- **SessionManager**: Manages user sessions with deterministic UUID mapping.
+- **PersonalityEngine**: Generates context‑aware system prompts.
+- **ConversationEngine**: Manages dialogue, streaming, and interaction flow.
+- **ExecutiveMind**: Orchestrates Intent → Goals → Strategy → Planning → Decision → Delegation → Execution → Review → Adaptation.
+- **ChiefOfStaff**: Synchronous capability execution with retries and direct handler support.
+- **ToolRegistry**: Unified registry with 15 capabilities, all with flexible `**kwargs` handlers.
+- **KnowledgeStore**: Stores facts, procedures, preferences, relationships, and memory records.
+- **RecallEngine**: Active memory API for suggestions and warnings.
+- **CognitiveAssistant**: Subconscious monitoring and proactive insights.
+
+## 🧪 Working Features
+- **Research**: `research_specialist` runs Brave Search via the Executive Model.
+- **Execute**: `execute:` commands run system commands via `system_control` (safe, with security policies).
+- **Web UI**: Basic interface with voice, TTS, streaming, and theme toggle.
+- **Memory**: Embeddings, semantic search, SQLite (Postgres optional), consolidation pipeline.
+- **User Management**: Registration, login, API key authentication.
+- **TTS Proxy**: Edge TTS container integration.
+- **Transcription**: Whisper (tiny) for voice input.
+- **Capability Registry**: 15 capabilities (research, coding, system, weather, calendar, email, GitHub, notes, todo, file_manager, etc.).
+- **DigitalTwin**: Hardware, capabilities, environment stored as MemoryRecords.
+- **Event Bus**: Standard vocabulary with audit logging.
+
+## 📁 Key Files (Current)
+| File | Purpose |
+|------|---------|
+| `src/api.py` | FastAPI entry point, now routes through Interaction Platform. |
+| `src/v2_main.py` | Engine initialisation, all capability registrations. |
+| `src/interaction/` | Interaction Platform modules (manager, session, personality, conversation, notification). |
+| `src/executive/mind.py` | ExecutiveMind – fast‑path, ReAct, and Executive Model for research/execute. |
+| `src/executive/chief_of_staff.py` | Synchronous capability execution with direct handler support. |
+| `src/core/tools.py` | Unified Capability Registry. |
+| `src/core/models.py` | Core data models (Goal, Task, Capability, Event, Memory). |
+| `src/bridge/synapse.py` | Secure system command execution. |
+| `src/llm_engine.py` | Model loading and inference. |
+| `src/templates.py` | Fallback system prompt (overridden by PersonalityEngine). |
+| `src/static/index.html` | Web UI (minimal – to be redesigned in Phase VII‑c). |
+| `governance/` | All governance documents (Constitution, Executive Model, Interaction Model, etc.). |
+
+## ⚠️ Known Issues / Limitations
+- **Multi‑step planning**: Planner currently creates only one Task per Goal – to be enhanced later.
+- **Budget enforcement**: Defined but not yet fully implemented in the Scheduler – planned for future phases.
+- **psycopg2 not installed**: Falls back to SQLite – works for now; can install later.
+- **Session persistence**: Sessions are in‑memory only – persistence to KnowledgeStore is pending (Phase VII‑e).
+- **Tool errors in ReAct loop**: Some tool parameter mismatches still appear in logs, but handlers now gracefully handle them via `**kwargs` fallbacks.
+
+## 🚀 Next Phase: Phase VII – Interaction Platform (Remaining Sub‑phases)
+- **VII‑b**: Notification Manager – add SSE endpoints for real‑time notifications.
+- **VII‑c**: Presentation Layer – redesign the Web UI to be minimal, stateful, and reactive.
+- **VII‑d**: Voice Engine Abstraction – wrap Whisper and TTS in a pluggable interface.
+- **VII‑e**: Session Persistence – store sessions in KnowledgeStore (secure memory).
+
+## 🧪 Test Commands
+```bash
+# Greeting (fast‑path)
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "Hello Jarvis"}'
+
+# Research (Executive Model)
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "Research the future of AI"}'
+
+# Execute system command (Executive Model)
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "execute: echo Hello from Jarvis"}'
+
+# Jarvis OS – Project Context (Updated 2026-07-15)
+
+## 🧠 Current Status
+- **Phases 0–VII Complete** – all foundation and interaction layers are in place.
+- **API**: Stable – all endpoints functional, including chat, notifications, voice, and session persistence.
+- **LLM**: Model loaded from `/app/host_models/dolphin-2_6-phi-2.Q4_K_M.gguf`.
+- **Main UI**: The Living Mind – an experimental graph‑based interface that visualizes Jarvis as a living cognitive system. Accessible at `/`.
+- **Classic Chat UI**: Still available at `/chat.html` (if you keep a copy).
+- **Interaction Platform**: Fully integrated – `InteractionManager`, `SessionManager`, `PersonalityEngine`, `ConversationEngine`, `NotificationManager` are live.
+- **Voice Engine**: Whisper STT and Edge TTS providers are abstracted and interchangeable.
+- **Session Persistence**: Sessions are stored in the KnowledgeStore and survive container restarts.
+
+## ✅ Completed Phases
+- **Phase 0**: Governance (Constitution, Development Constitution, Operational Policies, Execution Model).
+- **Phase I**: Architectural Consolidation (Goals, Tasks, Capabilities, Events, Memory).
+- **Phase II**: Core Abstractions (Planner, State Machine, Budgets).
+- **Phase III**: Execution Platform (Scheduler, Retry Engine).
+- **Phase IV**: Capability Platform (Contract, Context, Providers, Registry, Resolver, Execution, Confidence).
+- **Phase V**: Cognitive Platform (Experience, Attention, Workspace, Reflection, Learning, Knowledge, Recall, Cognitive Assistant, Sleep Scheduler).
+- **Phase VI**: Executive Model (Intent, Goals, Strategy, Planning, Decision, Delegation, Review, Adaptation).
+- **Phase VII**: Interaction Platform
+  - VII‑a: Foundation (InteractionManager, SessionManager, PersonalityEngine, ConversationEngine)
+  - VII‑b: Notification Manager (SSE, event subscription)
+  - VII‑c: Presentation Layer (Living Mind UI + classic chat fallback)
+  - VII‑d: Voice Engine Abstraction (Whisper STT, Edge TTS)
+  - VII‑e: Session Persistence (KnowledgeStore)
+
+## 🧩 Key Components (Current)
+- **InteractionManager**: Entry point for all interactions (web, voice, API, etc.).
+- **SessionManager**: Manages user sessions with persistence to KnowledgeStore.
+- **PersonalityEngine**: Generates context‑aware system prompts.
+- **ConversationEngine**: Manages dialogue, streaming, and interaction flow.
+- **ExecutiveMind**: Orchestrates Intent → Goals → Strategy → Planning → Decision → Delegation → Execution → Review → Adaptation.
+- **ChiefOfStaff**: Synchronous capability execution with retries and direct handler support.
+- **ToolRegistry**: Unified registry with 15 capabilities, all with flexible `**kwargs` handlers.
+- **KnowledgeStore**: Stores facts, procedures, preferences, relationships, and memory records.
+- **RecallEngine**: Active memory API for suggestions and warnings.
+- **CognitiveAssistant**: Subconscious monitoring and proactive insights.
+- **Voice Engine**: Pluggable STT (Whisper) and TTS (Edge TTS) providers.
+
+## 🖥️ User Interfaces
+- **The Living Mind** (default): Graph‑based visualisation at `/`. Nodes represent architectural components; animations show thinking, memory recall, execution, and reflection.
+- **Classic Chat UI** (fallback): Available at `/chat.html` if kept.
+
+## 🧪 Working Features
+- **Research**: `research_specialist` runs Brave Search via the Executive Model.
+- **Execute**: `execute:` commands run system commands via `system_control`.
+- **Memory**: Embeddings, semantic search, SQLite (Postgres optional), consolidation pipeline.
+- **User Management**: Registration, login, API key authentication.
+- **TTS/STT**: Voice input/output with abstraction layer.
+- **Notifications**: SSE streaming for task completions, failures, warnings.
+- **Session Persistence**: Sessions survive restarts.
+
+## 📁 Key Files (Current)
+| File | Purpose |
+|------|---------|
+| `src/api.py` | FastAPI entry point, routes through Interaction Platform. |
+| `src/v2_main.py` | Engine initialisation, all capability registrations. |
+| `src/interaction/` | Interaction Platform modules. |
+| `src/voice/` | Voice Engine abstraction. |
+| `src/executive/` | ExecutiveMind, ChiefOfStaff, etc. |
+| `src/core/` | Core models, tools, registry, event bus. |
+| `src/static/index.html` | The Living Mind UI (default). |
+| `src/static/chat.html` | Classic chat UI (optional fallback). |
+| `governance/` | All governance documents. |
+
+## ⚠️ Known Issues / Limitations
+- **Multi‑step planning**: Planner currently creates only one Task per Goal – to be enhanced later.
+- **Budget enforcement**: Defined but not fully implemented – planned for future.
+- **psycopg2 not installed**: Falls back to SQLite – works for now.
+- **Tool errors in ReAct loop**: Some parameter mismatches still appear but handlers now gracefully handle them via `**kwargs`.
+
+## 🚀 Next Phase: Phase VIII – Environment Platform
+- **File System** (read/write/list/watch)
+- **Calendar & Email** (already have tools, will integrate properly)
+- **Browser** (open URLs, scrape, screenshots)
+- **External APIs** (weather, news, etc.)
+- **Device Management** (sensors, hardware, peripherals)
+- **Workspace Awareness** (active windows, files, clipboard)
+
+## 🧪 Test Commands
+```bash
+# Research
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "Research the future of AI"}'
+
+# Execute
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  -d '{"message": "execute: echo Hello from Jarvis"}'
+
+# SSE Notifications
+curl -N -H "X-API-Key: c44dcd566e20d12f361464fb83c3734e02c60dbfd8b4f75e9a98f24d63c24918" \
+  http://localhost:8000/api/notifications/stream
