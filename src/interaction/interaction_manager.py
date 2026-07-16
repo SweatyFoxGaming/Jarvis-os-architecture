@@ -4,10 +4,10 @@ Governed by INTERACTION_MODEL.md
 """
 
 import logging
-from typing import Optional, Generator
+from typing import Optional, Generator, List, Dict, Any
 from uuid import UUID
 
-from src.interaction.models import Interaction, InteractionResponse, InteractionSource, InteractionKind
+from src.interaction.models import Interaction, InteractionResponse, InteractionSource, InteractionKind, Notification, NotificationType
 from src.interaction.session_manager import SessionManager
 from src.interaction.conversation_engine import ConversationEngine
 from src.interaction.notification_manager import NotificationManager
@@ -36,19 +36,14 @@ class InteractionManager:
         """
         Process an interaction synchronously.
         """
-        # Basic validation
         if not interaction.session_id:
             raise ValueError("session_id is required")
         if not interaction.content:
             raise ValueError("interaction content is required")
 
-        # Route based on kind/source
-        # For simplicity, all interactions go to conversation engine for now.
-        # Future: route to system events, capability events, etc.
         if interaction.kind in [InteractionKind.TEXT, InteractionKind.VOICE, InteractionKind.COMMAND]:
             return self.conversation_engine.process_interaction(interaction)
         else:
-            # Handle file, image, etc. later
             return InteractionResponse(
                 text=f"Received {interaction.kind} interaction. Processing not yet implemented.",
                 metadata={"error": "unsupported interaction kind"}
@@ -63,6 +58,27 @@ class InteractionManager:
         else:
             yield "Unsupported interaction kind for streaming."
 
-    def notify(self, notification):
-        """Send a notification via the notification manager."""
-        self.notification_manager.publish(notification)
+    # ---------- Notification Convenience Methods ----------
+    def notify(self, session_id: UUID, notification_type: NotificationType, title: str, body: str, actions: List[Dict[str, Any]] = None, priority: int = 1) -> None:
+        """Publish a notification to a session."""
+        self.notification_manager.publish_to_session(session_id, notification_type, title, body, actions, priority)
+
+    def get_notifications(self, session_id: UUID, unread_only: bool = False, limit: int = 50) -> List[Notification]:
+        """Get notifications for a session."""
+        if unread_only:
+            return self.notification_manager.get_unread(session_id)
+        return self.notification_manager.get_all(session_id, limit)
+
+    def mark_read(self, notification_id: UUID) -> bool:
+        return self.notification_manager.mark_read(notification_id)
+
+    def mark_all_read(self, session_id: UUID) -> int:
+        return self.notification_manager.mark_all_read(session_id)
+
+    def get_stream_queue(self, session_id: UUID):
+        """Get the SSE queue for a session."""
+        return self.notification_manager.get_queue(session_id)
+
+    def remove_stream_queue(self, session_id: UUID) -> None:
+        """Remove the SSE queue for a session."""
+        self.notification_manager.remove_queue(session_id)

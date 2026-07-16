@@ -2,6 +2,7 @@ import logging
 import traceback
 import time
 from typing import Dict, Any, List, Optional
+from uuid import UUID
 
 from src.core.interfaces import IChiefOfStaff, IEventBus
 from src.core.models import Task, Event, Priority, ExecutionState
@@ -76,8 +77,11 @@ class ChiefOfStaff(IChiefOfStaff):
         logger.info("[CoS] ToolRegistry attached.")
 
     # ---------- Core Synchronous Execution ----------
-    def schedule_task(self, task: Task) -> Any:
-        """Execute task synchronously and return result."""
+    def schedule_task(self, task: Task, session_id: Optional[UUID] = None) -> Any:
+        """
+        Execute task synchronously and return result.
+        Optionally include session_id for event correlation.
+        """
         logger.info(f"[CoS] Executing task {task.uuid}: capability='{task.target_capability}'")
 
         if not task.goal_uuid:
@@ -85,13 +89,16 @@ class ChiefOfStaff(IChiefOfStaff):
             logger.error(f"[CoS] {error_msg}")
             task.transition_to(ExecutionState.FAILED)
             task.error_message = error_msg
-            self._publish_event("TaskRejected", {"task_id": str(task.uuid), "reason": error_msg})
+            self._publish_event("TaskRejected", {
+                "task_id": str(task.uuid),
+                "reason": error_msg,
+                "session_id": str(session_id) if session_id else None,
+            })
             raise ValueError(error_msg)
 
         # Extract parameters from input_data
         params = getattr(task, 'input_data', {})
         if not params:
-            # Fallback for backward compatibility
             params = getattr(task, 'parameters', {}) or getattr(task, 'params', {})
         if not isinstance(params, dict):
             params = {"objective": str(params)} if params else {}
@@ -99,24 +106,30 @@ class ChiefOfStaff(IChiefOfStaff):
         last_error = None
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
-                # Resolve capability
                 if self.tool_registry:
                     cap_def = self.tool_registry.get(task.target_capability)
                     if cap_def:
-                        # If the capability has a direct handler, call it directly
                         if hasattr(cap_def, 'handler') and cap_def.handler is not None:
                             logger.info(f"[CoS] Using direct handler for {task.target_capability}")
                             result = cap_def.handler(**params)
-                            # Ensure result is serializable
                             task.transition_to(ExecutionState.COMPLETED)
-                            self._publish_event("TaskCompleted", {"task_id": str(task.uuid), "result": result})
+                            self._publish_event("TaskCompleted", {
+                                "task_id": str(task.uuid),
+                                "goal_uuid": str(task.goal_uuid),
+                                "session_id": str(session_id) if session_id else None,
+                                "result": result,
+                            })
                             self._cleanup_task(task)
                             return result
                         else:
-                            # Fallback to the tool registry execution (which may create internal Tasks)
                             result = self.tool_registry.execute_tool(task.target_capability, params)
                             task.transition_to(ExecutionState.COMPLETED)
-                            self._publish_event("TaskCompleted", {"task_id": str(task.uuid), "result": result})
+                            self._publish_event("TaskCompleted", {
+                                "task_id": str(task.uuid),
+                                "goal_uuid": str(task.goal_uuid),
+                                "session_id": str(session_id) if session_id else None,
+                                "result": result,
+                            })
                             self._cleanup_task(task)
                             return result
 
@@ -130,7 +143,12 @@ class ChiefOfStaff(IChiefOfStaff):
                         if isinstance(result, dict) and "result" in result:
                             result = result["result"]
                         task.transition_to(ExecutionState.COMPLETED)
-                        self._publish_event("TaskCompleted", {"task_id": str(task.uuid), "result": result})
+                        self._publish_event("TaskCompleted", {
+                            "task_id": str(task.uuid),
+                            "goal_uuid": str(task.goal_uuid),
+                            "session_id": str(session_id) if session_id else None,
+                            "result": result,
+                        })
                         self._cleanup_task(task)
                         return result
 
@@ -138,13 +156,22 @@ class ChiefOfStaff(IChiefOfStaff):
                 logger.error(f"[CoS] {msg}")
                 task.transition_to(ExecutionState.FAILED)
                 task.error_message = msg
-                self._publish_event("OperationalEscalation", {"task_id": str(task.uuid), "reason": msg})
+                self._publish_event("OperationalEscalation", {
+                    "task_id": str(task.uuid),
+                    "reason": msg,
+                    "session_id": str(session_id) if session_id else None,
+                })
                 raise RuntimeError(msg)
 
             except Exception as e:
                 last_error = e
                 logger.error(f"[CoS] Task {task.uuid} attempt {attempt} failed: {e}")
-                self._publish_event("TaskFailed", {"task_id": str(task.uuid), "attempt": attempt, "error": str(e)})
+                self._publish_event("TaskFailed", {
+                    "task_id": str(task.uuid),
+                    "attempt": attempt,
+                    "error": str(e),
+                    "session_id": str(session_id) if session_id else None,
+                })
 
                 if attempt < self.MAX_RETRIES:
                     logger.info(f"[CoS] Retrying task {task.uuid} in 1 second...")
@@ -155,7 +182,8 @@ class ChiefOfStaff(IChiefOfStaff):
                     task.error_message = str(e)
                     self._publish_event("OperationalEscalation", {
                         "task_id": str(task.uuid),
-                        "reason": f"Max retries exceeded: {str(e)}"
+                        "reason": f"Max retries exceeded: {str(e)}",
+                        "session_id": str(session_id) if session_id else None,
                     })
                     self._cleanup_task(task)
                     raise RuntimeError(f"Task {task.uuid} failed after {self.MAX_RETRIES} retries") from e
@@ -182,7 +210,7 @@ class ChiefOfStaff(IChiefOfStaff):
 
     # ---------- Event Handlers (observability) ----------
     def _on_task_completed(self, event: Event):
-        pass  # already handled synchronously
+        pass
 
     def _on_task_failed(self, event: Event):
         pass

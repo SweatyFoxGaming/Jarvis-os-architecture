@@ -6,6 +6,8 @@ from src.environment.providers.local_calendar import LocalCalendarProvider
 from src.environment.providers.services import LocalServicesProvider
 from src.environment.providers.local_email import LocalEmailProvider
 from src.environment.providers.local_github import LocalGitHubProvider
+from src.environment.providers.local_workspace import LocalWorkspaceProvider
+from src.environment.providers.local_hardware import LocalHardwareProvider
 
 __all__ = [
     "EnvironmentManager",
@@ -19,4 +21,6 @@ __all__ = [
     "LocalServicesProvider",
     "LocalEmailProvider",
     "LocalGitHubProvider",
+    "LocalWorkspaceProvider",
+    "LocalHardwareProvider",
 ]

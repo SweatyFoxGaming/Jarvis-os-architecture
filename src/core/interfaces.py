@@ -1,101 +1,126 @@
 """
-Interfaces (Protocols) for the Phoenix Intelligence Platform.
+Core Interfaces – contracts for core components.
 """
 
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
-from src.core.models import Task, Event, Capability, Goal, GoalBudget, ExecutionState, Priority, ResourceBudget, MemoryRecord
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional, Callable
+from uuid import UUID
+
 
 # ---------- Event Bus ----------
-@runtime_checkable
-class IEventBus(Protocol):
-    def publish(self, event: Event) -> None: ...
-    def subscribe(self, event_type: str, callback: Any) -> None: ...
-    def unsubscribe(self, event_type: str, callback: Any) -> None: ...
+class IEventBus(ABC):
+    @abstractmethod
+    def publish(self, event: Any) -> None:
+        pass
 
-# ---------- Workers ----------
-@runtime_checkable
-class IWorker(Protocol):
-    def execute(self, task: Task) -> Task: ...
-    def get_profile(self) -> Dict[str, Any]: ...
+    @abstractmethod
+    def subscribe(self, event_type: str, handler: Callable) -> None:
+        pass
 
-# ---------- Department Manager ----------
-@runtime_checkable
-class IDepartmentManager(Protocol):
-    def handle_task(self, task: Task) -> None: ...
-    def register_worker(self, worker: IWorker) -> None: ...
+    @abstractmethod
+    def unsubscribe(self, event_type: str, handler: Callable) -> None:
+        pass
 
-# ---------- Department ----------
-@runtime_checkable
-class IDepartment(Protocol):
-    @property
-    def name(self) -> str: ...
-    def initialize(self, event_bus: IEventBus) -> None: ...
-    def process_task(self, task: Task) -> Task: ...
-    def set_secure_memory(self, secure_memory: Any) -> None: ...
-    def set_secure_runner(self, secure_runner: Any) -> None: ...
-    def shutdown(self) -> None: ...
 
 # ---------- Chief of Staff ----------
-@runtime_checkable
-class IChiefOfStaff(Protocol):
-    def schedule_task(self, task: Task) -> None: ...
-    def monitor_progress(self) -> Dict[str, Any]: ...
+class IChiefOfStaff(ABC):
+    @abstractmethod
+    def schedule_task(self, task: Any) -> Any:
+        pass
 
-# ---------- CEO / Executive Mind ----------
-@runtime_checkable
-class ICEO(Protocol):
-    def process_request(self, user_input: str) -> str: ...
-    def assess_vision(self) -> str: ...
+    @abstractmethod
+    def monitor_progress(self) -> Dict[str, Any]:
+        pass
 
-# ---------- Model Manager ----------
-@runtime_checkable
-class IModelManager(Protocol):
-    def load_model(self, model_type: str, model_path: str, backend: str = "llama_cpp", **kwargs) -> Optional[Any]: ...
-    def select_model_for_task(self, task: Task) -> Optional[str]: ...
-    def get_engine(self, model_name: Optional[str] = None) -> Optional[Any]: ...
+    @abstractmethod
+    def shutdown(self) -> None:
+        pass
 
-# ---------- Hardware Manager ----------
-@runtime_checkable
-class IHardwareManager(Protocol):
-    @staticmethod
-    def detect_hardware() -> Dict[str, Any]: ...
-    @staticmethod
-    def get_optimized_settings(hardware_info: Dict[str, Any]) -> Dict[str, Any]: ...
 
-# ---------- Security Module ----------
-@runtime_checkable
-class ISecurityModule(Protocol):
-    def validate_path(self, path: str) -> bool: ...
-    def validate_command(self, command: str) -> bool: ...
-    def audit_log(self, action: str, resource: str, status: str, details: Optional[Dict[str, Any]] = None) -> None: ...
-    def sanitize_input(self, input_string: str, max_length: int = 2048) -> str: ...
+# ---------- Executive CEO ----------
+class ICEO(ABC):
+    @abstractmethod
+    def process_request(self, user_input: str, user_id: str, collect_trace: bool, force_agent: bool, system_prompt: Optional[str]) -> tuple:
+        pass
 
-# ---------- Digital Twin ----------
-@runtime_checkable
-class IDigitalTwin(Protocol):
-    def update_hardware(self, hardware_info: Dict[str, Any]) -> None: ...
-    def update_capabilities(self, capabilities: List[str]) -> None: ...
-    def get_summary(self) -> Dict[str, Any]: ...
+    @abstractmethod
+    def assess_vision(self) -> str:
+        pass
 
-# ---------- Memory Store ----------
-@runtime_checkable
-class IMemoryStore(Protocol):
-    def insert(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> int: ...
-    def search_by_text(self, search_term: str, limit: int = 10) -> List[Dict[str, Any]]: ...
-    def delete_by_id(self, record_id: int) -> bool: ...
-    def close(self) -> None: ...
+    @abstractmethod
+    def shutdown(self) -> None:
+        pass
 
-# ---------- Goal Manager ----------
-@runtime_checkable
-class IGoalManager(Protocol):
-    def create_goal(self, title: str, description: str, user_id: str = "default", budget: Optional[GoalBudget] = None) -> Goal: ...
-    def get_goal(self, goal_id: str) -> Optional[Goal]: ...
-    def complete_goal(self, goal_id: str, summary: str = None) -> bool: ...
 
-# ---------- State Machine ----------
-@runtime_checkable
-class IStateMachine(Protocol):
-    def can_transition(self, current: ExecutionState, target: ExecutionState, context: Dict[str, Any] = None) -> bool: ...
-    def transition(self, current: ExecutionState, target: ExecutionState, context: Dict[str, Any] = None) -> Optional[ExecutionState]: ...
-    def get_current_state(self) -> Optional[ExecutionState]: ...
-    def get_history(self) -> List[Dict[str, Any]]: ...
+# ---------- Department ----------
+class IDepartment(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def initialize(self, event_bus: IEventBus) -> None:
+        pass
+
+    @abstractmethod
+    def process_task(self, task: Any) -> None:
+        pass
+
+    @abstractmethod
+    def shutdown(self) -> None:
+        pass
+
+
+# ---------- Worker ----------
+class IWorker(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def initialize(self) -> None:
+        pass
+
+    @abstractmethod
+    def process(self, task: Any) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def shutdown(self) -> None:
+        pass
+
+
+# ---------- Department Manager ----------
+class IDepartmentManager(ABC):
+    @abstractmethod
+    def register_department(self, department: IDepartment) -> None:
+        pass
+
+    @abstractmethod
+    def get_department(self, name: str) -> Optional[IDepartment]:
+        pass
+
+    @abstractmethod
+    def list_departments(self) -> List[str]:
+        pass
+
+
+# ---------- Capability Registry ----------
+class ICapabilityRegistry(ABC):
+    @abstractmethod
+    def register(self, capability: Any, department: str) -> None:
+        pass
+
+    @abstractmethod
+    def list_capabilities(self) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def get_capability(self, name: str) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    def find_department(self, capability_name: str) -> Optional[str]:
+        pass

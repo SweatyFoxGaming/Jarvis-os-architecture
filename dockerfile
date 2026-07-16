@@ -10,17 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Allow git to work inside the container
-RUN git config --global --add safe.directory /app
-
-WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8000
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONPATH=/app
 
-CMD ["python3", "-m", "src.api"]
+EXPOSE 8000
+
+CMD ["uvicorn","src.api:app","--host","0.0.0.0","--port","8000"]

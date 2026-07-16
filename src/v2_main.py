@@ -28,7 +28,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from src.core.event_bus import EventBus
-from src.core.registry import DepartmentRegistry, CapabilityRegistry as CapabilityRegistryOld
+from src.core.registry import DepartmentRegistry, get_capability_registry
 from src.core.hardware import HardwareManager
 from src.core.model_manager import ModelManager
 from src.executive.chief_of_staff import ChiefOfStaff
@@ -125,13 +125,12 @@ class CognitiveEngineV3:
         # ---------- Core Infrastructure ----------
         self.event_bus = EventBus()
         self.dept_registry = DepartmentRegistry()
-        self.cap_registry = CapabilityRegistryOld()
+        self.cap_registry = get_capability_registry()
         self.twin = DigitalTwin(secure_memory=self.secure_memory)
 
         if self.secure_memory:
             self.event_bus.set_secure_memory(self.secure_memory)
             self.dept_registry.set_secure_memory(self.secure_memory)
-            self.cap_registry.set_secure_memory(self.secure_memory)
             self.twin.set_secure_memory(self.secure_memory)
             logging.info("[V2] Secure memory attached to infrastructure.")
 
@@ -231,7 +230,6 @@ class CognitiveEngineV3:
             plugin_path=os.path.join(project_root, "plugins"),
             event_bus=self.event_bus,
         )
-        # Discover existing plugins
         self.ecosystem.discover()
         logging.info("✅ Ecosystem Platform initialized.")
 
@@ -380,7 +378,7 @@ class CognitiveEngineV3:
         )
         self.tool_registry.register(sysinfo_cap)
 
-        # Weather – now using Environment Platform
+        # Weather – using Environment Platform
         def weather_handler(**kwargs):
             city = kwargs.get('city') or kwargs.get('location') or "London"
             services_provider = self.environment.get_domain_provider(Domain.SERVICES)
@@ -487,9 +485,6 @@ class CognitiveEngineV3:
         self.tool_registry.register(calendar_cap)
 
     def _register_email_tool(self):
-        """
-        Email send capability – now uses the Environment Platform.
-        """
         def email_handler(**kwargs):
             action = kwargs.get('action')
             if action != "send":
@@ -524,9 +519,6 @@ class CognitiveEngineV3:
         self.tool_registry.register(email_cap)
 
     def _register_email_reader_tool(self):
-        """
-        Email reader capability – now uses the Environment Platform.
-        """
         def email_reader_handler(**kwargs):
             action = kwargs.get('action', 'list')
             params = {}
@@ -612,9 +604,6 @@ class CognitiveEngineV3:
         self.tool_registry.register(file_manager_cap)
 
     def _register_github_tool(self):
-        """
-        GitHub capability – now uses the Environment Platform.
-        """
         def github_handler(**kwargs):
             action = kwargs.get('action')
             params = {k: v for k, v in kwargs.items() if k != 'action'}
@@ -885,9 +874,6 @@ class CognitiveEngineV3:
         self.tool_registry.register(notes_cap)
 
     def _register_workspace_tool(self):
-        """
-        Workspace capability – provides workspace awareness via the Environment Platform.
-        """
         def workspace_handler(**kwargs):
             action = kwargs.get('action', 'status')
             params = {k: v for k, v in kwargs.items() if k != 'action'}
@@ -917,9 +903,6 @@ class CognitiveEngineV3:
         self.tool_registry.register(workspace_cap)
 
     def _register_hardware_tool(self):
-        """
-        Hardware capability – provides hardware and network info.
-        """
         def hardware_handler(**kwargs):
             action = kwargs.get('action', 'status')
             params = {k: v for k, v in kwargs.items() if k != 'action'}
@@ -1013,7 +996,6 @@ class CognitiveEngineV3:
         if hasattr(self, 'evolution'):
             pass
         if hasattr(self, 'ecosystem'):
-            # Ecosystem shutdown: deactivate all active plugins
             for p in self.ecosystem.list_plugins():
                 if p.state == "active":
                     self.ecosystem.deactivate(str(p.id))

@@ -11,9 +11,11 @@ fastapi>=0.100.0
 uvicorn>=0.23.0
 pydantic
 pyaudio
-huggingface_hub
-sentence-transformers>=2.2.0
+huggingface_hub==0.34
+sentence-transformers==3.0.1
+transformer== 4.44
 pgvector>=0.2.0  
 # optional, only if using PostgreSQL with pgvector
 python-multipart
 PyGithub>=2.0.0
+openai-whisper

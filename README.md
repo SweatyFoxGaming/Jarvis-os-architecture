@@ -48,6 +48,8 @@ Immediately after an interaction, the **Reflection Module** analyzes the perform
 ### Phase 2: Sleep-Learning (Semantic Consolidation)
 By selecting **Mode [4]**, the system enters "Sleep-Learning." It iterates through recent episodic reflections and uses the LLM to distill them into permanent, high-density factual statements in the **Semantic Knowledge Base**. This allows the model to "learn" new rules and facts permanently.
 
+### Observation does NOT think, plan,execute, remember, It only observes.
+
 ## 🔌 System Integration
 
 ### Synapse IPC Bridge

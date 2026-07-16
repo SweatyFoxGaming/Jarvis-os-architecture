@@ -83,7 +83,8 @@ services:
       - /mnt/jarvis_home/logs:/app/logs
       - /home/ubuntu/.ssh:/root/.ssh:ro
       - ./src:/app/src
-      - /home/ubuntu/Downloads:/app/host_models 
+      - /home/ubuntu/Downloads:/app/host_models
+      - /mnt/jarvis_home/huggingface:/root/.cache/huggingface
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

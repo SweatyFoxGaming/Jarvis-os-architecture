@@ -1,182 +1,152 @@
-# src/core/tools.py
-import json
-import time
+"""
+Unified Capability Registry – supports direct handler execution.
+"""
+
 import logging
-from typing import Dict, Any, List, Callable, Optional
-from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional, List, Callable
+from enum import Enum
+
+from src.core.interfaces import IChiefOfStaff, IEventBus
+from src.core.registry import CapabilityRegistry, DepartmentRegistry
+from src.core.models import Task, Goal, Priority
 
 logger = logging.getLogger(__name__)
 
 
-class CapabilityParameter(BaseModel):
-    name: str = Field(..., description="Parameter name")
-    type: str = Field(..., description="Parameter type: string, integer, boolean, object")
-    description: str = Field(..., description="Parameter description")
-    required: bool = Field(False, description="Whether this parameter is required")
-    enum: Optional[List[str]] = Field(None, description="Allowed values (if applicable)")
+class CapabilityParameter:
+    """Parameter definition for a capability."""
+
+    def __init__(
+        self,
+        name: str,
+        type: str,
+        description: str,
+        required: bool = True,
+        enum: Optional[List[str]] = None,
+        default: Any = None,
+    ):
+        self.name = name
+        self.type = type
+        self.description = description
+        self.required = required
+        self.enum = enum
+        self.default = default
 
 
-class CapabilityDefinition(BaseModel):
-    name: str = Field(..., description="Unique capability name")
-    description: str = Field(..., description="What this capability does")
-    parameters: List[CapabilityParameter] = Field(default_factory=list)
-    handler: Optional[Callable] = Field(None, description="Function to execute this capability")
-    department: Optional[str] = Field(None, description="Department that owns this capability (legacy)")
+class CapabilityDefinition:
+    """Definition of a capability, including its handler."""
 
-    class Config:
-        extra = "forbid"
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        parameters: List[CapabilityParameter],
+        handler: Optional[Callable] = None,
+        department: str = "System",
+    ):
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self.handler = handler
+        self.department = department
 
 
-class CapabilityRegistry:
-    def __init__(self, chief_of_staff=None, cap_registry=None, dept_registry=None):
+class ToolRegistry:
+    """
+    Unified registry for capabilities/tools.
+    Supports direct handler execution to bypass Task/Goal creation when needed.
+    """
+
+    def __init__(
+        self,
+        chief_of_staff: Optional[IChiefOfStaff] = None,
+        cap_registry: Optional[CapabilityRegistry] = None,
+        dept_registry: Optional[DepartmentRegistry] = None,
+    ):
         self._capabilities: Dict[str, CapabilityDefinition] = {}
         self._chief_of_staff = chief_of_staff
         self._cap_registry = cap_registry
         self._dept_registry = dept_registry
-        self._task_results: Dict[str, Any] = {}
-        self._event_bus = None
+        self._event_bus: Optional[IEventBus] = None
         logger.info("[CapabilityRegistry] Initialized.")
 
-    def set_chief_of_staff(self, chief_of_staff):
-        self._chief_of_staff = chief_of_staff
-        logger.info("[CapabilityRegistry] Chief of Staff attached.")
-
-    def set_event_bus(self, event_bus):
+    def set_event_bus(self, event_bus: IEventBus):
         self._event_bus = event_bus
-        if event_bus:
-            event_bus.subscribe("TaskCompleted", self._on_task_completed)
-            event_bus.subscribe("TaskFailed", self._on_task_failed)
         logger.info("[CapabilityRegistry] EventBus attached.")
 
-    def set_secure_memory(self, secure_memory):
-        pass  # stub
-
-    def _on_task_completed(self, event):
-        task_id = event.payload.get("task_id")
-        if task_id:
-            self._task_results[task_id] = {"status": "completed", "data": event.payload.get("output_data", {})}
-            logger.debug(f"[CapabilityRegistry] Task {task_id} completed.")
-
-    def _on_task_failed(self, event):
-        task_id = event.payload.get("task_id")
-        if task_id:
-            self._task_results[task_id] = {"status": "failed", "error": event.payload.get("reason", "Unknown error")}
-            logger.warning(f"[CapabilityRegistry] Task {task_id} failed.")
-
-    def register(self, capability: CapabilityDefinition, department: Optional[str] = None) -> None:
-        if department:
-            capability.department = department
-        if capability.name in self._capabilities:
-            logger.warning(f"[CapabilityRegistry] Capability '{capability.name}' already registered. Overwriting.")
-        self._capabilities[capability.name] = capability
-        logger.info(f"[CapabilityRegistry] Registered capability: {capability.name}")
-
-    def register_tool(self, tool: CapabilityDefinition) -> None:
-        self.register(tool)
+    def register(self, cap_def: CapabilityDefinition) -> None:
+        """Register a capability definition."""
+        self._capabilities[cap_def.name] = cap_def
+        logger.info(f"[CapabilityRegistry] Registered capability: {cap_def.name}")
 
     def get(self, name: str) -> Optional[CapabilityDefinition]:
+        """Retrieve a capability definition by name."""
         return self._capabilities.get(name)
 
-    def get_tool(self, name: str) -> Optional[CapabilityDefinition]:
-        return self.get(name)
+    def execute_tool(self, name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute a tool by name.
+        If the tool has a handler, call it directly (bypasses Task creation).
+        Otherwise, create a Task and schedule it via ChiefOfStaff.
+        """
+        cap_def = self._capabilities.get(name)
+        if not cap_def:
+            return {"success": False, "error": f"Capability '{name}' not found"}
 
-    def list(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "name": c.name,
-                "description": c.description,
-                "parameters": [
-                    {
-                        "name": p.name,
-                        "type": p.type,
-                        "description": p.description,
-                        "required": p.required,
-                        "enum": p.enum,
-                    }
-                    for p in c.parameters
-                ],
-            }
-            for c in self._capabilities.values()
-        ]
-
-    def list_tools(self) -> List[Dict[str, Any]]:
-        return self.list()
-
-    def list_for_prompt(self) -> str:
-        if not self._capabilities:
-            return "No capabilities available."
-        lines = ["Capabilities (use only if needed):"]
-        for cap in self._capabilities.values():
-            desc = cap.description.split('.')[0] if cap.description else ""
-            lines.append(f"- {cap.name}: {desc}")
-        return "\n".join(lines)
-
-    def list_tools_for_prompt(self) -> str:
-        return self.list_for_prompt()
-
-    def execute(self, capability_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        goal_uuid = params.pop("_goal_uuid", None)
-        capability = self.get(capability_name)
-        if capability is None:
-            return {"success": False, "error": f"Capability '{capability_name}' not found"}
-
-        if capability.handler:
+        # ---- DIRECT HANDLER PATH ----
+        if cap_def.handler is not None:
             try:
-                result = capability.handler(**params)
+                result = cap_def.handler(**params)
                 return {"success": True, "result": result}
             except Exception as e:
-                logger.error(f"[CapabilityRegistry] Capability '{capability_name}' handler failed: {e}")
+                logger.error(f"[CapabilityRegistry] Capability '{name}' handler failed: {e}")
                 return {"success": False, "error": str(e)}
 
-        if self._chief_of_staff and capability.department:
-            try:
-                from src.core.models import Task, ExecutionState
-                task = Task(
-                    creator_id="CapabilityRegistry",
-                    target_capability=capability_name,
-                    input_data=params,
-                    goal_uuid=goal_uuid,
-                    state=ExecutionState.CREATED,
-                )
-                self._chief_of_staff.schedule_task(task)
-                task_id = str(task.uuid)
-                logger.info(f"[CapabilityRegistry] Scheduled task {task_id} for capability '{capability_name}' (goal: {goal_uuid})")
-                timeout = 60
-                start_time = time.time()
-                while time.time() - start_time < timeout:
-                    if task_id in self._task_results:
-                        result = self._task_results.pop(task_id)
-                        if result.get("status") == "completed":
-                            return {"success": True, "result": result.get("data", {})}
-                        else:
-                            return {"success": False, "error": result.get("error", "Task failed")}
-                    if task_id in self._chief_of_staff.active_tasks:
-                        time.sleep(0.5)
-                        continue
-                    break
-                return {"success": False, "error": f"Task {task_id} timed out after {timeout}s"}
-            except Exception as e:
-                logger.error(f"[CapabilityRegistry] Capability '{capability_name}' scheduling failed: {e}")
-                return {"success": False, "error": str(e)}
+        # ---- FALLBACK: SCHEDULE VIA CHIEF OF STAFF (requires Goal) ----
+        # This path is deprecated for direct execution but kept for legacy.
+        if self._chief_of_staff is None:
+            return {"success": False, "error": "ChiefOfStaff not available for scheduling"}
 
-        return {"success": False, "error": "No handler or department defined for this capability"}
+        try:
+            # Create a temporary Goal (this is suboptimal – should use a real Goal)
+            goal = Goal(
+                title=f"Execute {name}",
+                description=f"Execute tool {name} with parameters {params}",
+                user_id="system",
+            )
+            task = Task(
+                goal_uuid=goal.uuid,
+                creator_id="system",
+                target_capability=name,
+                input_data=params,
+            )
+            # Schedule the task
+            result = self._chief_of_staff.schedule_task(task, session_id=None)
+            return {"success": True, "result": result}
+        except Exception as e:
+            logger.error(f"[CapabilityRegistry] Capability '{name}' scheduling failed: {e}")
+            return {"success": False, "error": str(e)}
 
-    def execute_tool(self, tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        return self.execute(tool_name, params)
+    def list_tools_for_prompt(self) -> str:
+        """Generate a description of all registered tools for LLM prompting."""
+        if not self._capabilities:
+            return "No tools available."
+
+        lines = ["## Available Tools\n"]
+        for name, cap_def in self._capabilities.items():
+            lines.append(f"### {name}")
+            lines.append(f"Description: {cap_def.description}")
+            if cap_def.parameters:
+                lines.append("Parameters:")
+                for p in cap_def.parameters:
+                    required = "required" if p.required else "optional"
+                    enum_str = f" (options: {', '.join(p.enum)})" if p.enum else ""
+                    lines.append(f"  - {p.name} ({p.type}) {required}{enum_str}: {p.description}")
+            else:
+                lines.append("Parameters: None")
+            lines.append("")
+        return "\n".join(lines)
 
     def shutdown(self):
+        """Clean up resources."""
         logger.info("[CapabilityRegistry] Shutting down.")
-        self._capabilities.clear()
-        self._task_results.clear()
-        if self._event_bus:
-            try:
-                self._event_bus.unsubscribe("TaskCompleted", self._on_task_completed)
-                self._event_bus.unsubscribe("TaskFailed", self._on_task_failed)
-            except Exception:
-                pass
-
-
-# ---------- Backward Compatibility Aliases ----------
-ToolRegistry = CapabilityRegistry
-ToolDefinition = CapabilityDefinition
-ToolParameter = CapabilityParameter
